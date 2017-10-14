@@ -48,7 +48,7 @@ namespace derbaum
         public int VertexArrayObjectHandle;
     }
 
-    public struct ShaderAssetData
+    public struct BasicShaderAssetData
     {
         public bool IsLoaded;
         public string FragmentShaderName;
@@ -60,13 +60,24 @@ namespace derbaum
         public int ModelviewProjectionMatrixLocation;
     }
 
+    public struct LeafShaderAsset
+    {
+        public BasicShaderAssetData BasicShader;
+        public int OtherTextureLocation;
+        public int RatioLocation;
+    }
+
     public class DerBaumGameWindow : GameWindow
     {
         private bool toggleFullScreen;
         private int updateCounter = 1;
+        private double elapsedSeconds = 0;
 
-        private ShaderAssetData shader;
-        private ImageAssetData texture;
+        private LeafShaderAsset leafShader;
+        private BasicShaderAssetData shader;
+        private ImageAssetData greenTexture;
+        private ImageAssetData yellowTexture;
+        private ImageAssetData redTexture;
         private MeshAssetData mesh;
 
         private Matrix4 cameraTransformation;
@@ -89,18 +100,34 @@ namespace derbaum
             base.OnLoad(e);
             EnsureOpenGlVersion();
 
-            this.texture = new ImageAssetData() {
-                AssetName = "textures/ahorn.jpg"
+            this.greenTexture = new ImageAssetData() {
+                AssetName = "textures/ahorn_green.png"
+            };
+            this.yellowTexture = new ImageAssetData() {
+                AssetName = "textures/ahorn_yellow.png"
+            };
+            this.redTexture = new ImageAssetData() {
+                AssetName = "textures/ahorn_red.png"
             };
             this.mesh = new MeshAssetData() {
                 AssetName = "meshes/planewithuv.obj"
             };
-            this.shader = new ShaderAssetData {
+            this.shader = new BasicShaderAssetData {
                 VertexShaderName = "shader/Simple_VS.glsl",
                 FragmentShaderName = "shader/Simple_FS.glsl"
             };
+            this.leafShader = new LeafShaderAsset {
+                BasicShader = new BasicShaderAssetData {
+                    VertexShaderName = "shader/Simple_VS.glsl",
+                    FragmentShaderName = "shader/Leaf_FS.glsl"
+                },
+            };
+
+            this.LoadLeafShaderAsset(ref this.leafShader);
             this.LoadShaderAsset(ref this.shader);
-            this.LoadImageAsset(ref this.texture);
+            this.LoadImageAsset(ref this.greenTexture);
+            this.LoadImageAsset(ref this.yellowTexture);
+            this.LoadImageAsset(ref this.redTexture);
             this.LoadMeshData(ref this.mesh);
 
             cameraTransformation = Matrix4.LookAt(new Vector3(0, 0, 3),
@@ -108,12 +135,14 @@ namespace derbaum
                                                   new Vector3(0, 1, 0));
 
             GL.Enable(EnableCap.DepthTest);
-            //GL.ClearColor(1, 1, 1, 1);
+            GL.ClearColor(1, 1, 1, 1);
         }
 
         protected override void OnUnload(EventArgs e)
         {
-            UnloadImageAsset(this.texture);
+            UnloadImageAsset(this.greenTexture);
+            UnloadImageAsset(this.yellowTexture);
+            UnloadImageAsset(this.redTexture);
             UnloadMeshData(this.mesh);
             UnloadShaderAsset(this.shader);
         }
@@ -160,18 +189,27 @@ namespace derbaum
 
         protected override void OnRenderFrame(FrameEventArgs e)
         {
+            this.elapsedSeconds += e.Time;
             GL.Clear(ClearBufferMask.ColorBufferBit |
                      ClearBufferMask.DepthBufferBit);
 
-            GL.BindTexture(TextureTarget.Texture2D, texture.OpenGLHandle);
+            GL.ActiveTexture(TextureUnit.Texture0);
+            GL.BindTexture(TextureTarget.Texture2D, redTexture.OpenGLHandle);
+            GL.ActiveTexture(TextureUnit.Texture1);
+            GL.BindTexture(TextureTarget.Texture2D, greenTexture.OpenGLHandle);
+
             GL.BindVertexArray(mesh.VertexArrayObjectHandle);
-            GL.UseProgram(shader.ProgramHandle);
+            GL.UseProgram(leafShader.BasicShader.ProgramHandle);
 
             meshTransformation = Matrix4.CreateRotationX(updateCounter / 50.0f);
             meshTransformation *= Matrix4.CreateRotationY(updateCounter / 110.0f);
             var modelViewProjection = meshTransformation *
                                       cameraTransformation *
                                       cameraPerspectiveProjection;
+
+            GL.Uniform1(leafShader.OtherTextureLocation, 1);
+            var ratio = (float)(Math.Sin(elapsedSeconds) + 1.0) / 2;
+            GL.Uniform1(leafShader.RatioLocation, ratio);
             GL.UniformMatrix4(shader.ModelviewProjectionMatrixLocation,
                               false,
                               ref modelViewProjection);
@@ -222,7 +260,22 @@ namespace derbaum
             }
         }
 
-        private void LoadShaderAsset(ref ShaderAssetData shaderAsset)
+        private void LoadLeafShaderAsset(ref LeafShaderAsset leafShader)
+        {
+            this.LoadShaderAsset(ref leafShader.BasicShader);
+
+            leafShader.OtherTextureLocation = GL.GetUniformLocation(leafShader.BasicShader.ProgramHandle,
+                                                                    "other_texture");
+            leafShader.RatioLocation = GL.GetUniformLocation(leafShader.BasicShader.ProgramHandle,
+                                                             "ratio");
+        }
+
+        private void UnloadLeafShaderAsset(LeafShaderAsset leafShader)
+        {
+            this.UnloadShaderAsset(leafShader.BasicShader);
+        }
+
+        private void LoadShaderAsset(ref BasicShaderAssetData shaderAsset)
         {
             if (shaderAsset.IsLoaded)
                 return;
@@ -271,7 +324,7 @@ namespace derbaum
 
         }
 
-        private void UnloadShaderAsset(ShaderAssetData shaderAsset)
+        private void UnloadShaderAsset(BasicShaderAssetData shaderAsset)
         {
             if(shaderAsset.IsLoaded) {
                 GL.DeleteProgram(shaderAsset.ProgramHandle);
