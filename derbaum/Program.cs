@@ -19,9 +19,8 @@ namespace derbaum
                 // Get the title and category  of this example using reflection.
                 //ExampleAttribute info = ((ExampleAttribute)example.GetType().GetCustomAttributes(false)[0]);
                 //example.Title = String.Format("OpenTK | {0} {1}: {2}", info.Category, info.Difficulty, info.Title);
-                example.Run(30.0, 0.0);
+                example.Run(60.0, 0.0);
             }
         }
     }
-
 }

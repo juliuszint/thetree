@@ -35,6 +35,7 @@ namespace derbaum
         public string AssetName;
         public bool IsLoaded;
         public int OpenGLHandle;
+        public bool IsDisplacement;
     }
 
     public struct MeshAssetData
@@ -63,8 +64,8 @@ namespace derbaum
     public struct LeafShaderAsset
     {
         public BasicShaderAssetData BasicShader;
-        public int OtherTextureLocation;
-        public int RatioLocation;
+        public int DisplacementSamplerLocation;
+        public int DisplacementScalarLocation;
     }
 
     public class DerBaumGameWindow : GameWindow
@@ -74,65 +75,61 @@ namespace derbaum
         private double elapsedSeconds = 0;
 
         private LeafShaderAsset leafShader;
-        private BasicShaderAssetData shader;
-        private ImageAssetData greenTexture;
-        private ImageAssetData yellowTexture;
-        private ImageAssetData redTexture;
-        private MeshAssetData mesh;
 
-        private Matrix4 cameraTransformation;
-        private Matrix4 cameraPerspectiveProjection;
+        private ImageAssetData leafColorTexture;
+        private ImageAssetData leafDispTexture;
+        private MeshAssetData leafMesh;
 
-        private Matrix4 meshTransformation;
+        public Matrix4 cameraTransformation;
+        public Matrix4 cameraPerspectiveProjection;
 
         public DerBaumGameWindow()
-            : base(800, 600,
+            : base(1280, 720,
                   new GraphicsMode(),
                   "Der Baum",
-                  0,
+                  GameWindowFlags.Default,
                   DisplayDevice.Default,
-                  3, 0,
+                  3,
+                  0,
                   GraphicsContextFlags.ForwardCompatible | GraphicsContextFlags.Debug)
-        { }
+        {
+            this.Location = new Point(900, 350);
+        }
 
         protected override void OnLoad(EventArgs e)
         {
             base.OnLoad(e);
             EnsureOpenGlVersion();
+            EnsureVertexTextureUnits();
+            EnsureVertexUniformComponents();
 
-            this.greenTexture = new ImageAssetData() {
-                AssetName = "textures/ahorn_green.png"
+            this.leafColorTexture = new ImageAssetData() {
+                AssetName = "textures/leaf_texture.png"
             };
-            this.yellowTexture = new ImageAssetData() {
-                AssetName = "textures/ahorn_yellow.png"
+            this.LoadImageAsset(ref this.leafColorTexture);
+
+            this.leafDispTexture = new ImageAssetData() {
+                AssetName = "textures/leaf_texture_disp.png"
             };
-            this.redTexture = new ImageAssetData() {
-                AssetName = "textures/ahorn_red.png"
+            this.LoadImageAsset(ref this.leafDispTexture);
+
+            this.leafMesh = new MeshAssetData() {
+                AssetName = "meshes/plane_hp.obj"
             };
-            this.mesh = new MeshAssetData() {
-                AssetName = "meshes/planewithuv.obj"
-            };
-            this.shader = new BasicShaderAssetData {
-                VertexShaderName = "shader/Simple_VS.glsl",
-                FragmentShaderName = "shader/Simple_FS.glsl"
-            };
+            this.LoadMeshData(ref this.leafMesh);
+
             this.leafShader = new LeafShaderAsset {
                 BasicShader = new BasicShaderAssetData {
-                    VertexShaderName = "shader/Simple_VS.glsl",
+                    VertexShaderName = "shader/Leaf_VS.glsl",
                     FragmentShaderName = "shader/Leaf_FS.glsl"
                 },
             };
-
             this.LoadLeafShaderAsset(ref this.leafShader);
-            this.LoadShaderAsset(ref this.shader);
-            this.LoadImageAsset(ref this.greenTexture);
-            this.LoadImageAsset(ref this.yellowTexture);
-            this.LoadImageAsset(ref this.redTexture);
-            this.LoadMeshData(ref this.mesh);
 
             cameraTransformation = Matrix4.LookAt(new Vector3(0, 0, 3),
                                                   new Vector3(0, 0, 0),
                                                   new Vector3(0, 1, 0));
+
 
             GL.Enable(EnableCap.DepthTest);
             GL.ClearColor(1, 1, 1, 1);
@@ -140,11 +137,9 @@ namespace derbaum
 
         protected override void OnUnload(EventArgs e)
         {
-            UnloadImageAsset(this.greenTexture);
-            UnloadImageAsset(this.yellowTexture);
-            UnloadImageAsset(this.redTexture);
-            UnloadMeshData(this.mesh);
-            UnloadShaderAsset(this.shader);
+            this.UnloadImageAsset(this.leafColorTexture);
+            this.UnloadImageAsset(this.leafDispTexture);
+            this.UnloadMeshData(this.leafMesh);
         }
 
         protected override void OnResize(EventArgs e)
@@ -159,66 +154,47 @@ namespace derbaum
                                                  out this.cameraPerspectiveProjection);
         }
 
-        protected override void OnKeyDown(KeyboardKeyEventArgs e)
-        {
-            if (e.Key == Key.Enter && e.Modifiers == KeyModifiers.Alt) {
-                this.toggleFullScreen = true;
-            }
-            else {
-                base.OnKeyDown(e);
-            }
-        }
-
-        protected override void OnUpdateFrame(FrameEventArgs e)
-        {
-            if (Keyboard[Key.Escape]) {
-                this.Exit();
-            }
-
-            if (this.toggleFullScreen) {
-                if (WindowState != WindowState.Fullscreen) {
-                    WindowState = WindowState.Fullscreen;
-                }
-                else {
-                    WindowState = WindowState.Normal;
-                }
-                this.toggleFullScreen = false;
-            }
-            updateCounter++;
-        }
-
         protected override void OnRenderFrame(FrameEventArgs e)
         {
             this.elapsedSeconds += e.Time;
-            GL.Clear(ClearBufferMask.ColorBufferBit |
-                     ClearBufferMask.DepthBufferBit);
+            GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
             GL.ActiveTexture(TextureUnit.Texture0);
-            GL.BindTexture(TextureTarget.Texture2D, redTexture.OpenGLHandle);
+            GL.BindTexture(TextureTarget.Texture2D, leafColorTexture.OpenGLHandle);
             GL.ActiveTexture(TextureUnit.Texture1);
-            GL.BindTexture(TextureTarget.Texture2D, greenTexture.OpenGLHandle);
+            GL.BindTexture(TextureTarget.Texture2D, leafDispTexture.OpenGLHandle);
 
-            GL.BindVertexArray(mesh.VertexArrayObjectHandle);
+            GL.BindVertexArray(leafMesh.VertexArrayObjectHandle);
             GL.UseProgram(leafShader.BasicShader.ProgramHandle);
 
-            meshTransformation = Matrix4.CreateRotationX(updateCounter / 50.0f);
-            meshTransformation *= Matrix4.CreateRotationY(updateCounter / 110.0f);
-            var modelViewProjection = meshTransformation *
-                                      cameraTransformation *
+            var transformation = Matrix4.CreateRotationX(updateCounter / 50.0f);
+            transformation *= Matrix4.CreateRotationY(updateCounter / 110.0f);
+            var modelViewProjection = transformation * 
+                                      cameraTransformation * 
                                       cameraPerspectiveProjection;
+            GL.UniformMatrix4(
+                leafShader.BasicShader.ModelviewProjectionMatrixLocation,
+                false,
+                ref modelViewProjection);
+            GL.Uniform1(leafShader.DisplacementSamplerLocation, 1);
+            GL.Uniform1(leafShader.DisplacementScalarLocation, 0.5f);
 
-            GL.Uniform1(leafShader.OtherTextureLocation, 1);
-            var ratio = (float)(Math.Sin(elapsedSeconds) + 1.0) / 2;
-            GL.Uniform1(leafShader.RatioLocation, ratio);
-            GL.UniformMatrix4(shader.ModelviewProjectionMatrixLocation,
-                              false,
-                              ref modelViewProjection);
             GL.DrawElements(PrimitiveType.Triangles,
-                            mesh.IndicesCount,
+                            leafMesh.IndicesCount,
                             DrawElementsType.UnsignedInt,
                             IntPtr.Zero);
 
+            CheckOpenGlErrors();
+
             SwapBuffers();
+        }
+
+        private void CheckOpenGlErrors(bool dismiss = false)
+        {
+            ErrorCode error;
+            while((error = GL.GetError()) != ErrorCode.NoError && updateCounter % 30 == 0 && !dismiss) {
+                Console.WriteLine($"OpenGL error: {error.ToString()}");
+            }
         }
 
         private void LoadImageAsset(ref ImageAssetData asset)
@@ -232,6 +208,7 @@ namespace derbaum
             BitmapData bmpData = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
                                               ImageLockMode.ReadOnly,
                                               System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
             GL.TexImage2D(TextureTarget.Texture2D,
                           0,
                           PixelInternalFormat.Rgba,
@@ -263,11 +240,14 @@ namespace derbaum
         private void LoadLeafShaderAsset(ref LeafShaderAsset leafShader)
         {
             this.LoadShaderAsset(ref leafShader.BasicShader);
-
-            leafShader.OtherTextureLocation = GL.GetUniformLocation(leafShader.BasicShader.ProgramHandle,
-                                                                    "other_texture");
-            leafShader.RatioLocation = GL.GetUniformLocation(leafShader.BasicShader.ProgramHandle,
-                                                             "ratio");
+            leafShader.DisplacementSamplerLocation = GL.GetUniformLocation(
+                leafShader.BasicShader.ProgramHandle,
+                "displacement_sampler");
+            leafShader.DisplacementScalarLocation = GL.GetUniformLocation(
+                leafShader.BasicShader.ProgramHandle,
+                "displacement_scalar");
+            Console.WriteLine($"displacement_sampler: {leafShader.DisplacementSamplerLocation}");
+            Console.WriteLine($"displacement_scalar: {leafShader.DisplacementScalarLocation}");
         }
 
         private void UnloadLeafShaderAsset(LeafShaderAsset leafShader)
@@ -321,7 +301,7 @@ namespace derbaum
             shaderAsset.ModelviewProjectionMatrixLocation = GL.GetUniformLocation(
                 program,
                 "modelview_projection_matrix");
-
+            Console.WriteLine($"modelview_projection_matrix: {shaderAsset.ModelviewProjectionMatrixLocation}");
         }
 
         private void UnloadShaderAsset(BasicShaderAssetData shaderAsset)
@@ -422,6 +402,50 @@ namespace derbaum
                                    Vector3.SizeInBytes * 2);
             GL.BindVertexArray(0);
             assetData.VertexArrayObjectHandle = vertexArrayObjectHandle;
+        }
+
+        protected override void OnKeyDown(KeyboardKeyEventArgs e)
+        {
+            if (e.Key == Key.Enter && e.Modifiers == KeyModifiers.Alt) {
+                this.toggleFullScreen = true;
+            }
+            else {
+                base.OnKeyDown(e);
+            }
+        }
+
+        protected override void OnUpdateFrame(FrameEventArgs e)
+        {
+            if (Keyboard[Key.Escape]) {
+                this.Exit();
+            }
+
+            if (this.toggleFullScreen) {
+                if (WindowState != WindowState.Fullscreen) {
+                    WindowState = WindowState.Fullscreen;
+                }
+                else {
+                    WindowState = WindowState.Normal;
+                }
+                this.toggleFullScreen = false;
+            }
+            updateCounter++;
+        }
+
+        private static void EnsureVertexUniformComponents()
+        {
+            var maxVertexTextureUnits = GL.GetInteger(GetPName.MaxVertexUniformComponents);
+            if (maxVertexTextureUnits < 20) {
+                throw new NotSupportedException("Not enough Vertex Uniform slots");
+            }
+        }
+
+        private static void EnsureVertexTextureUnits()
+        {
+            var maxVertexTextureUnits = GL.GetInteger(GetPName.MaxVertexTextureImageUnits);
+            if (maxVertexTextureUnits < 5) {
+                throw new NotSupportedException("Not enough Vertex Texture slots");
+            }
         }
 
         private static void EnsureOpenGlVersion()
