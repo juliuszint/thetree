@@ -109,7 +109,7 @@ namespace derbaum
             this.LoadImageAsset(ref this.leafColorTexture);
 
             this.leafDispTexture = new ImageAssetData() {
-                AssetName = "textures/leaf_texture_disp.png"
+                AssetName = "textures/leaf_texture_disp.jpg"
             };
             this.LoadImageAsset(ref this.leafDispTexture);
 
@@ -177,7 +177,7 @@ namespace derbaum
                 false,
                 ref modelViewProjection);
             GL.Uniform1(leafShader.DisplacementSamplerLocation, 1);
-            GL.Uniform1(leafShader.DisplacementScalarLocation, 0.5f);
+            GL.Uniform1(leafShader.DisplacementScalarLocation, 0.2f);
 
             GL.DrawElements(PrimitiveType.Triangles,
                             leafMesh.IndicesCount,
