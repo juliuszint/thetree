@@ -10,6 +10,6 @@ void main()
     vec4 color = texture2D(sampler, texcoord);
 	if(color.a <= 0.2)
 		discard;
+
 	outputColor = color;
 }
-

@@ -68,20 +68,30 @@ namespace derbaum
         public int DisplacementScalarLocation;
     }
 
+    public struct CameraData
+    {
+        public float XAngle;
+        public float YAngle;
+        public Vector3 Position;
+
+        public Matrix4 Transformation;
+        public Matrix4 PerspectiveProjection;
+    }
+
     public class DerBaumGameWindow : GameWindow
     {
         private bool toggleFullScreen;
         private int updateCounter = 1;
         private double elapsedSeconds = 0;
+        private float PI = (float)Math.PI;
 
         private LeafShaderAsset leafShader;
 
         private ImageAssetData leafColorTexture;
         private ImageAssetData leafDispTexture;
         private MeshAssetData leafMesh;
-
-        public Matrix4 cameraTransformation;
-        public Matrix4 cameraPerspectiveProjection;
+        private Random randomSource;
+        private CameraData camera;
 
         public DerBaumGameWindow()
             : base(1280, 720,
@@ -102,6 +112,7 @@ namespace derbaum
             EnsureOpenGlVersion();
             EnsureVertexTextureUnits();
             EnsureVertexUniformComponents();
+            this.randomSource = new Random();
 
             this.leafColorTexture = new ImageAssetData() {
                 AssetName = "textures/leaf_texture.png"
@@ -114,7 +125,7 @@ namespace derbaum
             this.LoadImageAsset(ref this.leafDispTexture);
 
             this.leafMesh = new MeshAssetData() {
-                AssetName = "meshes/plane_hp.obj"
+                AssetName = "meshes/leaf.obj"
             };
             this.LoadMeshData(ref this.leafMesh);
 
@@ -126,13 +137,12 @@ namespace derbaum
             };
             this.LoadLeafShaderAsset(ref this.leafShader);
 
-            cameraTransformation = Matrix4.LookAt(new Vector3(0, 0, 3),
-                                                  new Vector3(0, 0, 0),
-                                                  new Vector3(0, 1, 0));
-
+            this.camera.Transformation = Matrix4.LookAt(new Vector3(0, 0, 8),
+                                                              new Vector3(0, 0, 0),
+                                                              new Vector3(0, 1, 0));
 
             GL.Enable(EnableCap.DepthTest);
-            GL.ClearColor(1, 1, 1, 1);
+            GL.ClearColor(.63f, .28f, 0.64f, 1);
         }
 
         protected override void OnUnload(EventArgs e)
@@ -151,27 +161,116 @@ namespace derbaum
                                                  aspectRatio,
                                                  1,
                                                  100,
-                                                 out this.cameraPerspectiveProjection);
+                                                 out this.camera.PerspectiveProjection);
         }
 
         protected override void OnRenderFrame(FrameEventArgs e)
         {
             this.elapsedSeconds += e.Time;
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+            MoveCamera(ref this.camera, (float)e.Time, 6.0f, 1.0f);
+            var viewProjection = this.camera.Transformation * this.camera.PerspectiveProjection;
+            var radius = 3;
+            for(int i = 0; i < 360; i += 10) {
+                for (int k = 0; k < 360; k += 10) {
+                    Matrix4 rotation = Matrix4.Identity;
+                    rotation *= Matrix4.CreateRotationY(DegreesToRadians(i));
+                    rotation *= Matrix4.CreateRotationX(DegreesToRadians(k));
+                    var position = (Vector4.UnitX * radius) * rotation;
 
+                    var modelViewProjection = rotation;
+                    modelViewProjection *= Matrix4.CreateTranslation(position.Xyz);
+                    modelViewProjection *= this.camera.Transformation;
+                    modelViewProjection *= this.camera.PerspectiveProjection;
+                    RenderLeaf(modelViewProjection);
+                }
+            }
+
+            //RenderLeaf(viewProjection);
+            CheckOpenGlErrors();
+            SwapBuffers();
+        }
+
+        private void MoveCamera(ref CameraData camera,
+                                float fTimeDelta,
+                                float translationSens,
+                                float rotationSens)
+        {
+            if(Keyboard[Key.A]) {
+                var ortho = Vector3.Cross(
+                    camera.Transformation.Column1.Xyz,
+                    camera.Transformation.Column2.Xyz);
+                camera.Position -= ortho * translationSens * fTimeDelta;
+            }
+            if(Keyboard[Key.D]) {
+                var ortho = Vector3.Cross(
+                    camera.Transformation.Column1.Xyz,
+                    camera.Transformation.Column2.Xyz);
+                camera.Position += ortho * translationSens * fTimeDelta;
+            }
+            if(Keyboard[Key.W]) {
+                camera.Position -= new Vector3(
+                    camera.Transformation.Column2.X,
+                    camera.Transformation.Column2.Y,
+                    camera.Transformation.Column2.Z) * translationSens * fTimeDelta;
+            }
+            if(Keyboard[Key.S]) {
+                camera.Position += new Vector3(
+                    camera.Transformation.Column2.X,
+                    camera.Transformation.Column2.Y,
+                    camera.Transformation.Column2.Z) * translationSens * fTimeDelta;
+            }
+            if(Keyboard[Key.E]) {
+                camera.Position += new Vector3(
+                    camera.Transformation.Column1.X,
+                    camera.Transformation.Column1.Y,
+                    camera.Transformation.Column1.Z) * translationSens * fTimeDelta;
+            }
+            if(Keyboard[Key.Q]) {
+                camera.Position -= new Vector3(
+                    camera.Transformation.Column1.X,
+                    camera.Transformation.Column1.Y,
+                    camera.Transformation.Column1.Z) * translationSens * fTimeDelta;
+            }
+            if(Keyboard[Key.Up]) {
+                camera.XAngle -= rotationSens * fTimeDelta;
+            }
+            if(Keyboard[Key.Down]) {
+                camera.XAngle += rotationSens * fTimeDelta;
+            }
+            if(Keyboard[Key.Left]) {
+                camera.YAngle -= rotationSens * fTimeDelta;
+            }
+            if(Keyboard[Key.Right]) {
+                camera.YAngle += rotationSens * fTimeDelta;
+            }
+
+            camera.Transformation = Matrix4.Identity;
+            camera.Transformation *= Matrix4.CreateTranslation(
+                -camera.Position.X,
+                -camera.Position.Y,
+                -camera.Position.Z);
+            camera.Transformation *= Matrix4.CreateRotationX(camera.XAngle);
+            camera.Transformation *= Matrix4.CreateRotationY(camera.YAngle);
+        }
+
+        private float DegreesToRadians(float degree)
+        {
+            var result = (float)(degree * (Math.PI / 180));
+            return result;
+        }
+
+        private void RenderLeaf(Matrix4 modelViewProjection)
+        {
             GL.ActiveTexture(TextureUnit.Texture0);
             GL.BindTexture(TextureTarget.Texture2D, leafColorTexture.OpenGLHandle);
             GL.ActiveTexture(TextureUnit.Texture1);
             GL.BindTexture(TextureTarget.Texture2D, leafDispTexture.OpenGLHandle);
-
             GL.BindVertexArray(leafMesh.VertexArrayObjectHandle);
             GL.UseProgram(leafShader.BasicShader.ProgramHandle);
 
-            var transformation = Matrix4.CreateRotationX(updateCounter / 50.0f);
-            transformation *= Matrix4.CreateRotationY(updateCounter / 110.0f);
-            var modelViewProjection = transformation * 
-                                      cameraTransformation * 
-                                      cameraPerspectiveProjection;
+            var transformation = Matrix4.CreateScale(0.2f);
+            transformation *= Matrix4.CreateRotationX(90.0f);
             GL.UniformMatrix4(
                 leafShader.BasicShader.ModelviewProjectionMatrixLocation,
                 false,
@@ -183,10 +282,11 @@ namespace derbaum
                             leafMesh.IndicesCount,
                             DrawElementsType.UnsignedInt,
                             IntPtr.Zero);
+        }
 
-            CheckOpenGlErrors();
+        private void RenderLeafSphere()
+        {
 
-            SwapBuffers();
         }
 
         private void CheckOpenGlErrors(bool dismiss = false)
