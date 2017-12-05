@@ -61,6 +61,11 @@ namespace derbaum
         public int ModelviewProjectionMatrixLocation;
     }
 
+    public struct BlinnShaderAsset
+    {
+        public BasicShaderAssetData BasicShader;
+    }
+
     public struct LeafShaderAsset
     {
         public BasicShaderAssetData BasicShader;
@@ -85,14 +90,15 @@ namespace derbaum
         private double elapsedSeconds = 0;
 
         private LeafShaderAsset leafShader;
+        private BlinnShaderAsset blinnShader;
         private BasicShaderAssetData basicShader;
 
         private ImageAssetData leafColorTexture;
         private ImageAssetData leafDispTexture;
         private ImageAssetData brownTexture;
+        private ImageAssetData emptyNormalTexture;
         private MeshAssetData leafMesh;
         private MeshAssetData treeMesh;
-        private Random randomSource;
         private CameraData camera;
 
         public DerBaumGameWindow()
@@ -110,11 +116,17 @@ namespace derbaum
 
         protected override void OnLoad(EventArgs e)
         {
+            int tick = Environment.TickCount;
+            Console.WriteLine("begin loading assets");
             base.OnLoad(e);
             EnsureOpenGlVersion();
             EnsureVertexTextureUnits();
             EnsureVertexUniformComponents();
-            this.randomSource = new Random();
+
+            this.emptyNormalTexture = new ImageAssetData() {
+                AssetName = "textures/empty_normal.jpg"
+            };
+            this.LoadImageAsset(ref this.emptyNormalTexture);
 
             this.brownTexture = new ImageAssetData() {
                 AssetName = "textures/brown.jpg"
@@ -144,6 +156,12 @@ namespace derbaum
                 VertexShaderName = "shader/Leaf_VS.glsl",
                 FragmentShaderName = "shader/Leaf_FS.glsl"
             };
+            this.blinnShader = new BlinnShaderAsset {
+                BasicShader = new BasicShaderAssetData {
+                    VertexShaderName = "shader/Blinn_VS.glsl",
+                    FragmentShaderName = "shader/Blinn_FS.glsl"
+                },
+            };
             this.leafShader = new LeafShaderAsset {
                 BasicShader = new BasicShaderAssetData {
                     VertexShaderName = "shader/Leaf_VS.glsl",
@@ -152,6 +170,7 @@ namespace derbaum
             };
             this.LoadShaderAsset(ref this.basicShader);
             this.LoadLeafShaderAsset(ref this.leafShader);
+            this.LoadBlinnShaderAsset(ref this.blinnShader);
 
             this.camera.Transformation = Matrix4.LookAt(new Vector3(0, 0, 20),
                                                         new Vector3(0, 0, 0),
@@ -162,13 +181,20 @@ namespace derbaum
             GL.Enable(EnableCap.DepthTest);
             //GL.ClearColor(.63f, .28f, 0.64f, 1);
             GL.ClearColor(1.0f, 1.0f, 1.0f, 1);
+            var time = Environment.TickCount - tick;
+            Console.WriteLine($"done loading assets in: {time / 1000.0}s");
         }
 
         protected override void OnUnload(EventArgs e)
         {
+            this.UnloadImageAsset(this.emptyNormalTexture);
+            this.UnloadImageAsset(this.brownTexture);
             this.UnloadImageAsset(this.leafColorTexture);
             this.UnloadImageAsset(this.leafDispTexture);
             this.UnloadMeshData(this.leafMesh);
+            this.UnloadMeshData(this.treeMesh);
+            this.UnloadLeafShaderAsset(this.leafShader);
+            this.UnloadShaderAsset(this.basicShader);
         }
 
         protected override void OnResize(EventArgs e)
@@ -269,10 +295,10 @@ namespace derbaum
         {
             GL.BindTexture(TextureTarget.Texture2D, brownTexture.OpenGLHandle);
             GL.BindVertexArray(treeMesh.VertexArrayObjectHandle);
-            GL.UseProgram(basicShader.ProgramHandle);
+            GL.UseProgram(blinnShader.BasicShader.ProgramHandle);
 
             GL.UniformMatrix4(
-                leafShader.BasicShader.ModelviewProjectionMatrixLocation,
+                blinnShader.BasicShader.ModelviewProjectionMatrixLocation,
                 false,
                 ref modelViewProjection);
 
@@ -359,22 +385,32 @@ namespace derbaum
             }
         }
 
-        private void LoadLeafShaderAsset(ref LeafShaderAsset leafShader)
+        private void LoadBlinnShaderAsset(ref BlinnShaderAsset shader)
         {
-            this.LoadShaderAsset(ref leafShader.BasicShader);
-            leafShader.DisplacementSamplerLocation = GL.GetUniformLocation(
-                leafShader.BasicShader.ProgramHandle,
-                "displacement_sampler");
-            leafShader.DisplacementScalarLocation = GL.GetUniformLocation(
-                leafShader.BasicShader.ProgramHandle,
-                "displacement_scalar");
-            Console.WriteLine($"displacement_sampler: {leafShader.DisplacementSamplerLocation}");
-            Console.WriteLine($"displacement_scalar: {leafShader.DisplacementScalarLocation}");
+            this.LoadShaderAsset(ref shader.BasicShader);
         }
 
-        private void UnloadLeafShaderAsset(LeafShaderAsset leafShader)
+        private void LoadLeafShaderAsset(ref LeafShaderAsset shader)
         {
-            this.UnloadShaderAsset(leafShader.BasicShader);
+            this.LoadShaderAsset(ref shader.BasicShader);
+            shader.DisplacementSamplerLocation = GL.GetUniformLocation(
+                shader.BasicShader.ProgramHandle,
+                "displacement_sampler");
+            shader.DisplacementScalarLocation = GL.GetUniformLocation(
+                shader.BasicShader.ProgramHandle,
+                "displacement_scalar");
+            //Console.WriteLine($"displacement_sampler: {shader.DisplacementSamplerLocation}");
+            //Console.WriteLine($"displacement_scalar: {shader.DisplacementScalarLocation}");
+        }
+
+        private void UnloadLeafShaderAsset(LeafShaderAsset shader)
+        {
+            this.UnloadShaderAsset(shader.BasicShader);
+        }
+
+        private void UnloadBlinnShaderAsset(BlinnShaderAsset shader)
+        {
+            this.UnloadShaderAsset(shader.BasicShader);
         }
 
         private void LoadShaderAsset(ref BasicShaderAssetData shaderAsset)
@@ -424,6 +460,7 @@ namespace derbaum
                 program,
                 "modelview_projection_matrix");
             Console.WriteLine($"modelview_projection_matrix: {shaderAsset.ModelviewProjectionMatrixLocation}");
+            shaderAsset.IsLoaded = true;
         }
 
         private void UnloadShaderAsset(BasicShaderAssetData shaderAsset)
@@ -433,6 +470,7 @@ namespace derbaum
                 GL.DeleteShader(shaderAsset.FragmentObjectHandle);
                 GL.DeleteShader(shaderAsset.VertexObjectHandle);
             }
+            shaderAsset.IsLoaded = false;
         }
 
         private void LoadMeshData(ref MeshAssetData meshAsset)
