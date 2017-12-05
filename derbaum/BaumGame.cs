@@ -83,13 +83,15 @@ namespace derbaum
         private bool toggleFullScreen;
         private int updateCounter = 1;
         private double elapsedSeconds = 0;
-        private float PI = (float)Math.PI;
 
         private LeafShaderAsset leafShader;
+        private BasicShaderAssetData basicShader;
 
         private ImageAssetData leafColorTexture;
         private ImageAssetData leafDispTexture;
+        private ImageAssetData brownTexture;
         private MeshAssetData leafMesh;
+        private MeshAssetData treeMesh;
         private Random randomSource;
         private CameraData camera;
 
@@ -114,6 +116,11 @@ namespace derbaum
             EnsureVertexUniformComponents();
             this.randomSource = new Random();
 
+            this.brownTexture = new ImageAssetData() {
+                AssetName = "textures/brown.jpg"
+            };
+            this.LoadImageAsset(ref this.brownTexture);
+
             this.leafColorTexture = new ImageAssetData() {
                 AssetName = "textures/leaf_texture.png"
             };
@@ -127,22 +134,34 @@ namespace derbaum
             this.leafMesh = new MeshAssetData() {
                 AssetName = "meshes/leaf.obj"
             };
+            this.treeMesh = new MeshAssetData() {
+                AssetName = "meshes/tree.obj"
+            };
+            this.LoadMeshData(ref this.treeMesh);
             this.LoadMeshData(ref this.leafMesh);
 
+            this.basicShader = new BasicShaderAssetData {
+                VertexShaderName = "shader/Leaf_VS.glsl",
+                FragmentShaderName = "shader/Leaf_FS.glsl"
+            };
             this.leafShader = new LeafShaderAsset {
                 BasicShader = new BasicShaderAssetData {
                     VertexShaderName = "shader/Leaf_VS.glsl",
                     FragmentShaderName = "shader/Leaf_FS.glsl"
                 },
             };
+            this.LoadShaderAsset(ref this.basicShader);
             this.LoadLeafShaderAsset(ref this.leafShader);
 
-            this.camera.Transformation = Matrix4.LookAt(new Vector3(0, 0, 8),
-                                                              new Vector3(0, 0, 0),
-                                                              new Vector3(0, 1, 0));
+            this.camera.Transformation = Matrix4.LookAt(new Vector3(0, 0, 20),
+                                                        new Vector3(0, 0, 0),
+                                                        new Vector3(0, 1, 0));
+            this.camera.Position = new Vector3(0, 3, 10);
+
 
             GL.Enable(EnableCap.DepthTest);
-            GL.ClearColor(.63f, .28f, 0.64f, 1);
+            //GL.ClearColor(.63f, .28f, 0.64f, 1);
+            GL.ClearColor(1.0f, 1.0f, 1.0f, 1);
         }
 
         protected override void OnUnload(EventArgs e)
@@ -170,23 +189,9 @@ namespace derbaum
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
             MoveCamera(ref this.camera, (float)e.Time, 6.0f, 1.0f);
             var viewProjection = this.camera.Transformation * this.camera.PerspectiveProjection;
-            var radius = 3;
-            for(int i = 0; i < 360; i += 10) {
-                for (int k = 0; k < 360; k += 10) {
-                    Matrix4 rotation = Matrix4.Identity;
-                    rotation *= Matrix4.CreateRotationY(DegreesToRadians(i));
-                    rotation *= Matrix4.CreateRotationX(DegreesToRadians(k));
-                    var position = (Vector4.UnitX * radius) * rotation;
 
-                    var modelViewProjection = rotation;
-                    modelViewProjection *= Matrix4.CreateTranslation(position.Xyz);
-                    modelViewProjection *= this.camera.Transformation;
-                    modelViewProjection *= this.camera.PerspectiveProjection;
-                    RenderLeaf(modelViewProjection);
-                }
-            }
+            RenderTree(viewProjection);
 
-            //RenderLeaf(viewProjection);
             CheckOpenGlErrors();
             SwapBuffers();
         }
@@ -258,6 +263,23 @@ namespace derbaum
         {
             var result = (float)(degree * (Math.PI / 180));
             return result;
+        }
+
+        private void RenderTree(Matrix4 modelViewProjection)
+        {
+            GL.BindTexture(TextureTarget.Texture2D, brownTexture.OpenGLHandle);
+            GL.BindVertexArray(treeMesh.VertexArrayObjectHandle);
+            GL.UseProgram(basicShader.ProgramHandle);
+
+            GL.UniformMatrix4(
+                leafShader.BasicShader.ModelviewProjectionMatrixLocation,
+                false,
+                ref modelViewProjection);
+
+            GL.DrawElements(PrimitiveType.Triangles,
+                            treeMesh.IndicesCount,
+                            DrawElementsType.UnsignedInt,
+                            IntPtr.Zero);
         }
 
         private void RenderLeaf(Matrix4 modelViewProjection)
