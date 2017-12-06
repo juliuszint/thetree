@@ -51,6 +51,42 @@ namespace derbaum
 
         private static void CalculateTangentsAndBiTangents(WavefrontFileData data)
         {
+            for(int i = 0; i < data.Triangles.Length; i++) {
+                var triangleInfo = data.Triangles[i];
+                var v1 = data.Vertices[triangleInfo.VertexIndex1];
+                var v2 = data.Vertices[triangleInfo.VertexIndex2];
+                var v3 = data.Vertices[triangleInfo.VertexIndex3];
+                var uv1 = data.Uvs[triangleInfo.UvIndex1];
+                var uv2 = data.Uvs[triangleInfo.UvIndex2];
+                var uv3 = data.Uvs[triangleInfo.UvIndex3];
+                var n1 = data.Normals[triangleInfo.NormalIndex1];
+
+                var edge1 = v2 - v1;
+                var edge2 = v3 - v1;
+                var deltaUv1 = uv2 - uv1;
+                var deltaUv2 = uv3 - uv1;
+                float f;
+                if (Math.Abs(deltaUv1.X * deltaUv2.Y - deltaUv2.X * deltaUv1.Y) < 0.0001f) {
+                    f = 1.0f;
+                }
+                else {
+                    f = 1.0f / (deltaUv1.X * deltaUv2.Y - deltaUv2.X * deltaUv1.Y);
+                }
+                var tangent = new Vector3(f * (deltaUv2.Y * edge1.X - deltaUv1.Y * edge2.X),
+                                          f * (deltaUv2.Y * edge1.Y - deltaUv1.Y * edge2.Y),
+                                          f * (deltaUv2.Y * edge1.Z - deltaUv1.Y * edge2.Z));
+                tangent.Normalize();
+
+                var biTangent = new Vector3(f * (-deltaUv2.X * edge1.X + deltaUv1.X * edge2.X),
+                                           f * (-deltaUv2.X * edge1.Y + deltaUv1.X * edge2.Y),
+                                           f * (-deltaUv2.X * edge1.Z + deltaUv1.X * edge2.Z));
+                biTangent.Normalize();
+                if (Vector3.Dot(Vector3.Cross(n1, tangent), biTangent) < 0.0f) {
+                    tangent = tangent * -1.0f;
+                }
+                triangleInfo.Tangent = tangent;
+                triangleInfo.Bitangent = biTangent;
+            }
         }
 
         private static ObjectVertexData CreateVertexDataObject(WavefrontFileData data)

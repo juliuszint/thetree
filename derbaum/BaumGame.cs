@@ -25,11 +25,13 @@ namespace derbaum
         public Vector3[] BiTangents;
     }
 
-    public enum VertexAttribIndex
+    public static class VertexAttribIndex
     {
-        Vertex = 0,
-        Normal = 1,
-        Uv = 2
+        public const int Vertex = 0;
+        public const int Normal = 1;
+        public const int Uv = 2;
+        public const int Tangent = 3;
+        public const int Bitangent = 4;
     }
 
     public struct ImageAssetData
@@ -497,10 +499,11 @@ namespace derbaum
 
         private void PushMeshToGPUBuffer(ObjectVertexData mesh, ref MeshAssetData assetData)
         {
-            var interleaved = new float[8 * mesh.Vertices.Length];
+            int strideCount = 14;
+            var interleaved = new float[strideCount * mesh.Vertices.Length];
             var interleavedIndex = 0;
             for (int i = 0; i < mesh.Vertices.Length; i++) {
-                interleavedIndex = i * 8;
+                interleavedIndex = i * strideCount;
                 interleaved[interleavedIndex++] = mesh.Vertices[i].X;
                 interleaved[interleavedIndex++] = mesh.Vertices[i].Y;
                 interleaved[interleavedIndex++] = mesh.Vertices[i].Z;
@@ -511,6 +514,14 @@ namespace derbaum
 
                 interleaved[interleavedIndex++] = mesh.UVs[i].X;
                 interleaved[interleavedIndex++] = mesh.UVs[i].Y;
+
+                interleaved[interleavedIndex++] = mesh.Tangents[i].X;
+                interleaved[interleavedIndex++] = mesh.Tangents[i].Y;
+                interleaved[interleavedIndex++] = mesh.Tangents[i].Z;
+
+                interleaved[interleavedIndex++] = mesh.BiTangents[i].X;
+                interleaved[interleavedIndex++] = mesh.BiTangents[i].Y;
+                interleaved[interleavedIndex++] = mesh.BiTangents[i].Z;
             }
 
             int vertexBufferHandle;
@@ -541,27 +552,41 @@ namespace derbaum
             GL.EnableVertexAttribArray(0);
             GL.EnableVertexAttribArray(1);
             GL.EnableVertexAttribArray(2);
+            GL.EnableVertexAttribArray(3);
+            GL.EnableVertexAttribArray(4);
 
-            var stride = 2 * (Vector3.SizeInBytes) + Vector2.SizeInBytes;
-            GL.VertexAttribPointer((int)VertexAttribIndex.Vertex,
+            var stride = (4 * Vector3.SizeInBytes) + Vector2.SizeInBytes;
+            GL.VertexAttribPointer(VertexAttribIndex.Vertex,
                                    3,
                                    VertexAttribPointerType.Float,
                                    true,
                                    stride,
                                    0);
 
-            GL.VertexAttribPointer((int)VertexAttribIndex.Normal,
+            GL.VertexAttribPointer(VertexAttribIndex.Normal,
                                    3,
                                    VertexAttribPointerType.Float,
                                    true,
                                    stride,
                                    Vector3.SizeInBytes);
-            GL.VertexAttribPointer((int)VertexAttribIndex.Uv,
+            GL.VertexAttribPointer(VertexAttribIndex.Uv,
                                    2,
                                    VertexAttribPointerType.Float,
                                    true,
                                    stride,
-                                   Vector3.SizeInBytes * 2);
+                                   2 * Vector3.SizeInBytes);
+            GL.VertexAttribPointer(VertexAttribIndex.Tangent,
+                                   3,
+                                   VertexAttribPointerType.Float,
+                                   true,
+                                   stride,
+                                   2 * Vector3.SizeInBytes + Vector2.SizeInBytes);
+            GL.VertexAttribPointer(VertexAttribIndex.Bitangent,
+                                   3,
+                                   VertexAttribPointerType.Float,
+                                   true,
+                                   stride,
+                                   3 * Vector3.SizeInBytes + Vector2.SizeInBytes);
             GL.BindVertexArray(0);
             assetData.VertexArrayObjectHandle = vertexArrayObjectHandle;
         }
