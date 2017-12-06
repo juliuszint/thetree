@@ -21,6 +21,8 @@ namespace derbaum
         public Vector3[] Vertices;
         public Vector3[] Normals;
         public Vector2[] UVs;
+        public Vector3[] Tangents;
+        public Vector3[] BiTangents;
     }
 
     public enum VertexAttribIndex

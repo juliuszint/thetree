@@ -7,107 +7,185 @@ namespace derbaum
 {
     public static class Wavefront
     {
+        const string WavefrontNormal = "vn";
+        const string WavefrontVertex = "v";
+        const string WavefrontUv = "vt";
+        const string WavefrontTriangle = "f";
+
+        private struct WavefrontFace
+        {
+            public int VertexIndex1;
+            public int VertexIndex2;
+            public int VertexIndex3;
+
+            public int NormalIndex1;
+            public int NormalIndex2;
+            public int NormalIndex3;
+
+            public int UvIndex1;
+            public int UvIndex2;
+            public int UvIndex3;
+
+            public Vector3 Tangent;
+            public Vector3 Bitangent;
+        }
+
+        private struct WavefrontFileData
+        {
+            public Vector3[] Vertices;
+            public Vector3[] Normals;
+            public Vector2[] Uvs;
+            public WavefrontFace[] Triangles;
+        }
+
         public static ObjectVertexData Load(string fileName)
         {
-            var counting = true;
-            var result = new ObjectVertexData();
             var stringContent = File.ReadAllText(fileName);
-            var stringLines = StringSplitWithCount(stringContent, "\n");
-            var partMultiArray = new string[stringLines.Length][];
-            for(int i = 0; i < partMultiArray.Length; i++) {
-                partMultiArray[i] = StringSplitWithCount(stringLines[i], " ");
-            }
-            int vCount = 0, vtCount = 0, vnCount = 0, fCount = 0;
-            int vIndex = 0, vtIndex = 0, vnIndex = 0, fIndex = 0;
-            Vector3[] vertices = null;
-            Vector3[] normals = null;
-            Vector2[] uvs = null;
-            TriangleIndexContext[] triangles = null;
+            var textContent = SplitStringContent(stringContent);
+            var inMemoryWavefront = AllocateMemoryForFile(textContent);
+            ParseFile(inMemoryWavefront, textContent);
+            CalculateTangentsAndBiTangents(inMemoryWavefront);
+            var result = CreateVertexDataObject(inMemoryWavefront);
+            return result;
+        }
 
-            while(true) {
-                foreach (var parts in partMultiArray) {
-                    if (parts.Length < 0 || parts[0].StartsWith("#"))
-                        continue;
+        private static void CalculateTangentsAndBiTangents(WavefrontFileData data)
+        {
+        }
 
-                    switch (parts[0]) {
-                        case "v": {
-                                if (counting)
-                                    vCount++;
-                                else {
-                                    vertices[vIndex++] = new Vector3(
-                                        float.Parse(parts[1], CultureInfo.InvariantCulture),
-                                        float.Parse(parts[2], CultureInfo.InvariantCulture),
-                                        float.Parse(parts[3], CultureInfo.InvariantCulture));
-                                }
-                            } break;
-                        case "vt": {
-                                if(counting) 
-                                    vtCount++;
-                                else {
-                                    uvs[vtIndex++] = new Vector2(
-                                        float.Parse(parts[1], CultureInfo.InvariantCulture),
-                                        1.0f - float.Parse(parts[2], CultureInfo.InvariantCulture));
-                                }
-                            } break;
-                        case "vn": {
-                                if(counting) 
-                                    vnCount++;
-                                else {
-                                    normals[vnIndex++] = new Vector3(
-                                        float.Parse(parts[1], CultureInfo.InvariantCulture),
-                                        float.Parse(parts[2], CultureInfo.InvariantCulture),
-                                        float.Parse(parts[3], CultureInfo.InvariantCulture));
-                                }
-                            } break;
-                        case "f": {
-                                if(counting) 
-                                    fCount++;
-                                else {
-                                    IndexContextFromString(parts[1], ref triangles[fIndex++]);
-                                    IndexContextFromString(parts[2], ref triangles[fIndex++]);
-                                    IndexContextFromString(parts[3], ref triangles[fIndex++]);
-                                }
-                            } break;
-                        default: {
-                                BaumEnvironment.Log(LogLevel.Warning,
-                                                    $"ignoring {parts[0]} while loading obj file");
-                            } break;
-                    }
-                }
-                if(counting) {
-                    vertices = new Vector3[vCount];
-                    uvs = new Vector2[vtCount];
-                    normals = new Vector3[vnCount];
-                    triangles = new TriangleIndexContext[fCount * 3];
+        private static ObjectVertexData CreateVertexDataObject(WavefrontFileData data)
+        {
+            var result = new ObjectVertexData();
+            result.Vertices = new Vector3[data.Triangles.Length * 3];
+            result.Normals = new Vector3[data.Triangles.Length * 3];
+            result.UVs = new Vector2[data.Triangles.Length * 3];
+            result.Tangents = new Vector3[data.Triangles.Length * 3];
+            result.BiTangents = new Vector3[data.Triangles.Length * 3];
+            result.Indices = new int[data.Triangles.Length * 3];
 
-                    result.Vertices = new Vector3[fCount * 3];
-                    result.Normals = new Vector3[fCount * 3];
-                    result.UVs = new Vector2[fCount * 3];
-                    result.Indices = new int[fCount * 3];
-                }
-                else {
-                    break;
-                }
-                counting = false;
-            }
+            for(int i = 0; i < data.Triangles.Length; i++) {
+                var triangleInfo = data.Triangles[i];
+                var index = i * 3;
+                result.Vertices[index + 0] = data.Vertices[triangleInfo.VertexIndex1];
+                result.Vertices[index + 1] = data.Vertices[triangleInfo.VertexIndex2];
+                result.Vertices[index + 2] = data.Vertices[triangleInfo.VertexIndex3];
 
-            for(int i = 0; i < triangles.Length; i++) {
-                var triangleVertex = triangles[i];
-                result.Vertices[i] = vertices[triangleVertex.VertexIndex];
-                result.Normals[i] = normals[triangleVertex.NormalIndex];
-                result.UVs[i] = uvs[triangleVertex.UvIndex];
-                result.Indices[i] = i;
+                result.Normals[index + 0] = data.Vertices[triangleInfo.NormalIndex1];
+                result.Normals[index + 1] = data.Vertices[triangleInfo.NormalIndex2];
+                result.Normals[index + 2] = data.Vertices[triangleInfo.NormalIndex3];
+
+                result.UVs[index + 0] = data.Uvs[triangleInfo.UvIndex1];
+                result.UVs[index + 1] = data.Uvs[triangleInfo.UvIndex2];
+                result.UVs[index + 2] = data.Uvs[triangleInfo.UvIndex3];
+
+                result.Tangents[index + 0] = triangleInfo.Tangent;
+                result.Tangents[index + 1] = triangleInfo.Tangent;
+                result.Tangents[index + 2] = triangleInfo.Tangent;
+
+                result.BiTangents[index + 0] = triangleInfo.Bitangent;
+                result.BiTangents[index + 1] = triangleInfo.Bitangent;
+                result.BiTangents[index + 2] = triangleInfo.Bitangent;
+
+                result.Indices[index + 0] = index + 0;
+                result.Indices[index + 1] = index + 1;
+                result.Indices[index + 2] = index + 2;
             }
 
             return result;
         }
 
-        private static void IndexContextFromString(string text, ref TriangleIndexContext context)
+        private static WavefrontFileData AllocateMemoryForFile(string[][] lines)
         {
-            var indicesText = text.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-            context.VertexIndex = int.Parse(indicesText[0]) - 1;
-            context.NormalIndex = int.Parse(indicesText[2]) - 1;
-            context.UvIndex     = int.Parse(indicesText[1]) - 1;
+            var result = new WavefrontFileData();
+            int vertexCount = 0;
+            int normalCount = 0;
+            int triangleCount = 0;
+            int uvCount = 0;
+            foreach(string[] content in lines) {
+                if (content.Length <= 0)
+                    continue;
+
+                switch(content[0]) {
+                    case WavefrontVertex:
+                        vertexCount++;
+                        break;
+                    case WavefrontNormal:
+                        normalCount++;
+                        break;
+                    case WavefrontUv:
+                        uvCount++;
+                        break;
+                    case WavefrontTriangle:
+                        triangleCount++;
+                        break;
+                }
+            }
+            result.Vertices = new Vector3[vertexCount];
+            result.Normals = new Vector3[normalCount];
+            result.Uvs = new Vector2[uvCount];
+            result.Triangles = new WavefrontFace[triangleCount];
+            return result;
+        }
+
+        private static void ParseFile(WavefrontFileData data, string[][] textcontent)
+        {
+            int vertexIndex = 0;
+            int uvIndex = 0;
+            int normalIndex = 0;
+            int triangleIndex = 0;
+            foreach(string[] content in textcontent) {
+                if (content.Length < 0 || content[0].StartsWith("#")) {
+                    continue;
+                }
+
+                switch(content[0]) {
+                    case WavefrontVertex:
+                        data.Vertices[vertexIndex++] = new Vector3(
+                            float.Parse(content[1], CultureInfo.InvariantCulture),
+                            float.Parse(content[2], CultureInfo.InvariantCulture),
+                            float.Parse(content[3], CultureInfo.InvariantCulture));
+                        break;
+                    case WavefrontNormal:
+                        data.Normals[normalIndex++] = new Vector3(
+                            float.Parse(content[1], CultureInfo.InvariantCulture),
+                            float.Parse(content[2], CultureInfo.InvariantCulture),
+                            float.Parse(content[3], CultureInfo.InvariantCulture));
+                        break;
+                    case WavefrontUv:
+                        data.Uvs[uvIndex++] = new Vector2(
+                            float.Parse(content[1], CultureInfo.InvariantCulture),
+                            1.0f - float.Parse(content[2], CultureInfo.InvariantCulture));
+                        break;
+                    case WavefrontTriangle:
+                        var indicesText = content[1].Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                        data.Triangles[triangleIndex].VertexIndex1 = int.Parse(indicesText[0]) - 1;
+                        data.Triangles[triangleIndex].NormalIndex1 = int.Parse(indicesText[2]) - 1;
+                        data.Triangles[triangleIndex].UvIndex1     = int.Parse(indicesText[1]) - 1;
+
+                        indicesText = content[2].Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                        data.Triangles[triangleIndex].VertexIndex2 = int.Parse(indicesText[0]) - 1;
+                        data.Triangles[triangleIndex].NormalIndex2 = int.Parse(indicesText[2]) - 1;
+                        data.Triangles[triangleIndex].UvIndex2     = int.Parse(indicesText[1]) - 1;
+
+                        indicesText = content[3].Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                        data.Triangles[triangleIndex].VertexIndex3 = int.Parse(indicesText[0]) - 1;
+                        data.Triangles[triangleIndex].NormalIndex3 = int.Parse(indicesText[2]) - 1;
+                        data.Triangles[triangleIndex].UvIndex3     = int.Parse(indicesText[1]) - 1;
+
+                        triangleIndex++;
+                        break;
+                }
+            }
+        }
+
+        private static string[][] SplitStringContent(string fileContent)
+        {
+            var stringLines = StringSplitWithCount(fileContent, "\n");
+            var partMultiArray = new string[stringLines.Length][];
+            for(int i = 0; i < partMultiArray.Length; i++) {
+                partMultiArray[i] = StringSplitWithCount(stringLines[i], " ");
+            }
+            return partMultiArray;
         }
 
         private static string[] StringSplitWithCount(string content, string splitAt)
@@ -156,13 +234,6 @@ namespace derbaum
                 _counting = false;
             }
             return _result;
-        }
-
-        private struct TriangleIndexContext
-        {
-            public int VertexIndex;
-            public int NormalIndex;
-            public int UvIndex;
         }
     }
 }
