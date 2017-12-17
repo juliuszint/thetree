@@ -68,6 +68,15 @@ namespace derbaum
     public struct BlinnShaderAsset
     {
         public BasicShaderAssetData BasicShader;
+        public int ModelMatrixLocation;
+        public int ColorTextureLocation;
+        public int NormalTextureLocation;
+        public int MaterialShininessLocation;
+        public int LightDirectionLocation;
+        public int LightAmbientColorLocation;
+        public int LightDiffuseColorLocation;
+        public int LightSpecularColorLocation;
+        public int CameraPositionLocation;
     }
 
     public struct LeafShaderAsset
@@ -101,8 +110,12 @@ namespace derbaum
         private ImageAssetData leafDispTexture;
         private ImageAssetData brownTexture;
         private ImageAssetData emptyNormalTexture;
+        private ImageAssetData rockNormalTexture;
+        private ImageAssetData wallNormalTexture;
         private MeshAssetData leafMesh;
         private MeshAssetData treeMesh;
+        private MeshAssetData cubeMesh;
+        private MeshAssetData icoSphereMesh;
         private CameraData camera;
 
         public DerBaumGameWindow()
@@ -130,21 +143,26 @@ namespace derbaum
             this.emptyNormalTexture = new ImageAssetData() {
                 AssetName = "textures/empty_normal.jpg"
             };
-            this.LoadImageAsset(ref this.emptyNormalTexture);
-
+            this.rockNormalTexture = new ImageAssetData() {
+                AssetName = "textures/rock_normal.jpg"
+            };
+            this.wallNormalTexture = new ImageAssetData() {
+                AssetName = "textures/wall_normal.png"
+            };
             this.brownTexture = new ImageAssetData() {
                 AssetName = "textures/brown.jpg"
             };
-            this.LoadImageAsset(ref this.brownTexture);
-
             this.leafColorTexture = new ImageAssetData() {
                 AssetName = "textures/leaf_texture.png"
             };
-            this.LoadImageAsset(ref this.leafColorTexture);
-
             this.leafDispTexture = new ImageAssetData() {
                 AssetName = "textures/leaf_texture_disp.jpg"
             };
+            this.LoadImageAsset(ref this.wallNormalTexture);
+            this.LoadImageAsset(ref this.emptyNormalTexture);
+            this.LoadImageAsset(ref this.rockNormalTexture);
+            this.LoadImageAsset(ref this.leafColorTexture);
+            this.LoadImageAsset(ref this.brownTexture);
             this.LoadImageAsset(ref this.leafDispTexture);
 
             this.leafMesh = new MeshAssetData() {
@@ -153,7 +171,15 @@ namespace derbaum
             this.treeMesh = new MeshAssetData() {
                 AssetName = "meshes/tree.obj"
             };
+            this.cubeMesh = new MeshAssetData() {
+                AssetName = "meshes/cube.obj"
+            };
+            this.icoSphereMesh = new MeshAssetData() {
+                AssetName = "meshes/icosphere.obj"
+            };
             this.LoadMeshData(ref this.treeMesh);
+            this.LoadMeshData(ref this.cubeMesh);
+            this.LoadMeshData(ref this.icoSphereMesh);
             this.LoadMeshData(ref this.leafMesh);
 
             this.basicShader = new BasicShaderAssetData {
@@ -195,8 +221,13 @@ namespace derbaum
             this.UnloadImageAsset(this.brownTexture);
             this.UnloadImageAsset(this.leafColorTexture);
             this.UnloadImageAsset(this.leafDispTexture);
+            this.UnloadImageAsset(this.rockNormalTexture);
+
             this.UnloadMeshData(this.leafMesh);
             this.UnloadMeshData(this.treeMesh);
+            this.UnloadMeshData(this.cubeMesh);
+            this.UnloadMeshData(this.icoSphereMesh);
+
             this.UnloadLeafShaderAsset(this.leafShader);
             this.UnloadShaderAsset(this.basicShader);
         }
@@ -220,7 +251,7 @@ namespace derbaum
             MoveCamera(ref this.camera, (float)e.Time, 6.0f, 1.0f);
             var viewProjection = this.camera.Transformation * this.camera.PerspectiveProjection;
 
-            RenderTree(viewProjection);
+            RenderTree();
 
             CheckOpenGlErrors();
             SwapBuffers();
@@ -268,10 +299,10 @@ namespace derbaum
                     camera.Transformation.Column1.Z) * translationSens * fTimeDelta;
             }
             if(Keyboard[Key.Up]) {
-                camera.XAngle -= rotationSens * fTimeDelta;
+                //camera.XAngle -= rotationSens * fTimeDelta;
             }
             if(Keyboard[Key.Down]) {
-                camera.XAngle += rotationSens * fTimeDelta;
+                //camera.XAngle += rotationSens * fTimeDelta;
             }
             if(Keyboard[Key.Left]) {
                 camera.YAngle -= rotationSens * fTimeDelta;
@@ -295,21 +326,44 @@ namespace derbaum
             return result;
         }
 
-        private void RenderTree(Matrix4 modelViewProjection)
+        private void RenderTree()
         {
+            GL.ActiveTexture(TextureUnit.Texture0);
             GL.BindTexture(TextureTarget.Texture2D, brownTexture.OpenGLHandle);
+            GL.ActiveTexture(TextureUnit.Texture1);
+            GL.BindTexture(TextureTarget.Texture2D, emptyNormalTexture.OpenGLHandle);
+
             GL.BindVertexArray(treeMesh.VertexArrayObjectHandle);
             GL.UseProgram(blinnShader.BasicShader.ProgramHandle);
 
+            Matrix4 modelMatrix = Matrix4.Identity;
+            //modelMatrix = Matrix4.CreateRotationY(this.updateCounter / 100.0f);
+            var modelViewProjection = modelMatrix * this.camera.Transformation * this.camera.PerspectiveProjection;
             GL.UniformMatrix4(
                 blinnShader.BasicShader.ModelviewProjectionMatrixLocation,
                 false,
                 ref modelViewProjection);
 
+
+            GL.UniformMatrix4(blinnShader.ModelMatrixLocation, false, ref modelMatrix);
+            GL.Uniform1(blinnShader.ColorTextureLocation, 0);
+            GL.Uniform1(blinnShader.NormalTextureLocation, 1);
+            GL.Uniform1(blinnShader.MaterialShininessLocation, 10.0f);
+            var lightDirection = new Vector3(0, 1, 0);
+            lightDirection.Normalize();
+            GL.Uniform3(blinnShader.LightDirectionLocation, lightDirection);
+
+            GL.Uniform4(blinnShader.LightAmbientColorLocation, new Vector4(0.6f, 0.6f, 0.6f, 0));
+            GL.Uniform4(blinnShader.LightDiffuseColorLocation, new Vector4(0.8f, 0.8f, 0.8f, 0));
+            GL.Uniform4(blinnShader.LightSpecularColorLocation, new Vector4(0.0f, 0.0f, 0.0f, 0));
+            GL.Uniform4(blinnShader.CameraPositionLocation, new Vector4(this.camera.Position, 1));
+
             GL.DrawElements(PrimitiveType.Triangles,
                             treeMesh.IndicesCount,
                             DrawElementsType.UnsignedInt,
                             IntPtr.Zero);
+            GL.BindVertexArray(0);
+            GL.ActiveTexture(TextureUnit.Texture0);
         }
 
         private void RenderLeaf(Matrix4 modelViewProjection)
@@ -334,6 +388,7 @@ namespace derbaum
                             leafMesh.IndicesCount,
                             DrawElementsType.UnsignedInt,
                             IntPtr.Zero);
+            GL.ActiveTexture(TextureUnit.Texture0);
         }
 
         private void RenderLeafSphere()
@@ -392,6 +447,18 @@ namespace derbaum
         private void LoadBlinnShaderAsset(ref BlinnShaderAsset shader)
         {
             this.LoadShaderAsset(ref shader.BasicShader);
+            GL.BindAttribLocation(shader.BasicShader.ProgramHandle, VertexAttribIndex.Tangent, "in_tangent");
+            GL.BindAttribLocation(shader.BasicShader.ProgramHandle, VertexAttribIndex.Bitangent, "in_bitangent");
+
+            shader.ModelMatrixLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "model_matrix");
+            shader.MaterialShininessLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "specular_shininess");
+            shader.LightDirectionLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "light_direction");
+            shader.LightAmbientColorLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "light_ambient_color");
+            shader.LightDiffuseColorLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "light_diffuse_color");
+            shader.LightSpecularColorLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "light_specular_color");
+            shader.CameraPositionLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "camera_position");
+            shader.ColorTextureLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "color_texture");
+            shader.NormalTextureLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "normalmap_texture");
         }
 
         private void LoadLeafShaderAsset(ref LeafShaderAsset shader)
@@ -454,9 +521,9 @@ namespace derbaum
             GL.AttachShader(program, vertexObject);
             shaderAsset.ProgramHandle = program;
 
-            GL.BindAttribLocation(program, (int)VertexAttribIndex.Vertex, "in_position");
-            GL.BindAttribLocation(program, (int)VertexAttribIndex.Normal, "in_normal");
-            GL.BindAttribLocation(program, (int)VertexAttribIndex.Uv, "in_uv");
+            GL.BindAttribLocation(program, VertexAttribIndex.Vertex, "in_position");
+            GL.BindAttribLocation(program, VertexAttribIndex.Normal, "in_normal");
+            GL.BindAttribLocation(program, VertexAttribIndex.Uv, "in_uv");
 
             GL.LinkProgram(program);
 

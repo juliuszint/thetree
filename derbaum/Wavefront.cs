@@ -46,7 +46,33 @@ namespace derbaum
             ParseFile(inMemoryWavefront, textContent);
             CalculateTangentsAndBiTangents(inMemoryWavefront);
             var result = CreateVertexDataObject(inMemoryWavefront);
+            //AverageTangents(result);
             return result;
+        }
+
+        private static void AverageTangents(ObjectVertexData data)
+        {
+            for (int i = 0; i < data.Vertices.Length - 1; i++) {
+                for (int o = i + 1; o < data.Vertices.Length; o++) {
+                    var vi = data.Vertices[i];
+                    var vo = data.Vertices[o];
+                    var ni = data.Normals[i];
+                    var no = data.Normals[o];
+                    var ui = data.UVs[i];
+                    var uo = data.UVs[o];
+
+                    if (vi == vo && ni == no && ui == uo)
+                    {
+                        Vector3 tanI = data.Tangents[i];
+                        data.Tangents[i] += data.Tangents[o];
+                        data.Tangents[o] += tanI;
+
+                        Vector3 biTanI = data.BiTangents[i];
+                        data.BiTangents[i] += data.BiTangents[o];
+                        data.BiTangents[o] += biTanI;
+                    }
+                }
+            }
         }
 
         private static void CalculateTangentsAndBiTangents(WavefrontFileData data)
@@ -84,8 +110,8 @@ namespace derbaum
                 if (Vector3.Dot(Vector3.Cross(n1, tangent), biTangent) < 0.0f) {
                     tangent = tangent * -1.0f;
                 }
-                triangleInfo.Tangent = tangent;
-                triangleInfo.Bitangent = biTangent;
+                data.Triangles[i].Tangent = tangent;
+                data.Triangles[i].Bitangent = biTangent;
             }
         }
 
@@ -106,9 +132,9 @@ namespace derbaum
                 result.Vertices[index + 1] = data.Vertices[triangleInfo.VertexIndex2];
                 result.Vertices[index + 2] = data.Vertices[triangleInfo.VertexIndex3];
 
-                result.Normals[index + 0] = data.Vertices[triangleInfo.NormalIndex1];
-                result.Normals[index + 1] = data.Vertices[triangleInfo.NormalIndex2];
-                result.Normals[index + 2] = data.Vertices[triangleInfo.NormalIndex3];
+                result.Normals[index + 0] = data.Normals[triangleInfo.NormalIndex1];
+                result.Normals[index + 1] = data.Normals[triangleInfo.NormalIndex2];
+                result.Normals[index + 2] = data.Normals[triangleInfo.NormalIndex3];
 
                 result.UVs[index + 0] = data.Uvs[triangleInfo.UvIndex1];
                 result.UVs[index + 1] = data.Uvs[triangleInfo.UvIndex2];
