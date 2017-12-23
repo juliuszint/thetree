@@ -108,7 +108,6 @@ namespace derbaum
 
         private ObjectVertexData leaf_positions;
         private ImageAssetData leafColorTexture;
-        private ImageAssetData leafDispTexture;
         private ImageAssetData brownTexture;
         private ImageAssetData emptyNormalTexture;
         private ImageAssetData rockNormalTexture;
@@ -116,6 +115,7 @@ namespace derbaum
         private MeshAssetData leafMesh;
         private MeshAssetData treeMesh;
         private MeshAssetData cubeMesh;
+        private MeshAssetData planeMesh;
         private MeshAssetData icoSphereMesh;
         private CameraData camera;
 
@@ -156,18 +156,17 @@ namespace derbaum
             this.leafColorTexture = new ImageAssetData() {
                 AssetName = "textures/leaf_texture.png"
             };
-            this.leafDispTexture = new ImageAssetData() {
-                AssetName = "textures/leaf_texture_disp.jpg"
-            };
             this.LoadImageAsset(ref this.wallNormalTexture);
             this.LoadImageAsset(ref this.emptyNormalTexture);
             this.LoadImageAsset(ref this.rockNormalTexture);
             this.LoadImageAsset(ref this.leafColorTexture);
             this.LoadImageAsset(ref this.brownTexture);
-            this.LoadImageAsset(ref this.leafDispTexture);
 
             this.leafMesh = new MeshAssetData() {
                 AssetName = "meshes/leaf.obj"
+            };
+            this.planeMesh = new MeshAssetData() {
+                AssetName = "meshes/plane.obj"
             };
             this.treeMesh = new MeshAssetData() {
                 AssetName = "meshes/tree.obj"
@@ -179,6 +178,7 @@ namespace derbaum
                 AssetName = "meshes/icosphere.obj"
             };
             this.LoadMeshData(ref this.treeMesh);
+            this.LoadMeshData(ref this.planeMesh);
             this.LoadMeshData(ref this.cubeMesh);
             this.LoadMeshData(ref this.icoSphereMesh);
             this.LoadMeshData(ref this.leafMesh);
@@ -223,10 +223,10 @@ namespace derbaum
             this.UnloadImageAsset(this.emptyNormalTexture);
             this.UnloadImageAsset(this.brownTexture);
             this.UnloadImageAsset(this.leafColorTexture);
-            this.UnloadImageAsset(this.leafDispTexture);
             this.UnloadImageAsset(this.rockNormalTexture);
 
             this.UnloadMeshData(this.leafMesh);
+            this.UnloadMeshData(this.planeMesh);
             this.UnloadMeshData(this.treeMesh);
             this.UnloadMeshData(this.cubeMesh);
             this.UnloadMeshData(this.icoSphereMesh);
@@ -304,7 +304,7 @@ namespace derbaum
         {
             GL.ActiveTexture(TextureUnit.Texture0);
             GL.BindTexture(TextureTarget.Texture2D, leafColorTexture.OpenGLHandle);
-            GL.BindVertexArray(leafMesh.VertexArrayObjectHandle);
+            GL.BindVertexArray(planeMesh.VertexArrayObjectHandle);
             GL.UseProgram(blinnShader.BasicShader.ProgramHandle);
 
             for(int i = 0; i < this.leaf_positions.Vertices.Length; i++) {
@@ -318,7 +318,7 @@ namespace derbaum
                 var angleDegrees = RadiansToDegrees(angle);
                 var rotationAxis = Vector3.Cross(leafDirection, normal);
                 var modelMatrix = Matrix4.CreateFromAxisAngle(rotationAxis, angle) * 
-                                  Matrix4.CreateScale(.1f) *
+                                  Matrix4.CreateScale(.5f) *
                                   Matrix4.CreateTranslation(vertex);
 
                 var modelViewProjection = modelMatrix * 
@@ -329,8 +329,21 @@ namespace derbaum
                     false,
                     ref modelViewProjection);
 
+                GL.UniformMatrix4(blinnShader.ModelMatrixLocation, false, ref modelMatrix);
+                GL.Uniform1(blinnShader.ColorTextureLocation, 0);
+                GL.Uniform1(blinnShader.NormalTextureLocation, 1);
+                GL.Uniform1(blinnShader.MaterialShininessLocation, 10.0f);
+                var lightDirection = new Vector3(0, 1, 0);
+                lightDirection.Normalize();
+                GL.Uniform3(blinnShader.LightDirectionLocation, lightDirection);
+
+                GL.Uniform4(blinnShader.LightAmbientColorLocation, new Vector4(0.8f, 0.8f, 0.8f, 0));
+                GL.Uniform4(blinnShader.LightDiffuseColorLocation, new Vector4(0.9f, 0.9f, 0.9f, 0));
+                GL.Uniform4(blinnShader.LightSpecularColorLocation, new Vector4(0.0f, 0.0f, 0.0f, 0));
+                GL.Uniform4(blinnShader.CameraPositionLocation, new Vector4(this.camera.Position, 1));
+
                 GL.DrawElements(PrimitiveType.Triangles,
-                                leafMesh.IndicesCount,
+                                planeMesh.IndicesCount,
                                 DrawElementsType.UnsignedInt,
                                 IntPtr.Zero);
             }
