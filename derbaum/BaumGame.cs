@@ -106,6 +106,7 @@ namespace derbaum
         private BlinnShaderAsset blinnShader;
         private BasicShaderAssetData basicShader;
 
+        private ObjectVertexData leaf_positions;
         private ImageAssetData leafColorTexture;
         private ImageAssetData leafDispTexture;
         private ImageAssetData brownTexture;
@@ -182,6 +183,8 @@ namespace derbaum
             this.LoadMeshData(ref this.icoSphereMesh);
             this.LoadMeshData(ref this.leafMesh);
 
+            this.leaf_positions = Wavefront.Load("meshes/leaf_positions.obj");
+
             this.basicShader = new BasicShaderAssetData {
                 VertexShaderName = "shader/Leaf_VS.glsl",
                 FragmentShaderName = "shader/Leaf_FS.glsl"
@@ -252,9 +255,85 @@ namespace derbaum
             var viewProjection = this.camera.Transformation * this.camera.PerspectiveProjection;
 
             RenderTree();
+            RenderLeaf();
 
             CheckOpenGlErrors();
             SwapBuffers();
+        }
+
+        private void RenderTree()
+        {
+            GL.ActiveTexture(TextureUnit.Texture0);
+            GL.BindTexture(TextureTarget.Texture2D, brownTexture.OpenGLHandle);
+            GL.ActiveTexture(TextureUnit.Texture1);
+            GL.BindTexture(TextureTarget.Texture2D, emptyNormalTexture.OpenGLHandle);
+
+            GL.BindVertexArray(treeMesh.VertexArrayObjectHandle);
+            GL.UseProgram(blinnShader.BasicShader.ProgramHandle);
+
+            Matrix4 modelMatrix = Matrix4.Identity;
+            //modelMatrix = Matrix4.CreateRotationY(this.updateCounter / 100.0f);
+            var modelViewProjection = modelMatrix * this.camera.Transformation * this.camera.PerspectiveProjection;
+            GL.UniformMatrix4(
+                blinnShader.BasicShader.ModelviewProjectionMatrixLocation,
+                false,
+                ref modelViewProjection);
+
+            GL.UniformMatrix4(blinnShader.ModelMatrixLocation, false, ref modelMatrix);
+            GL.Uniform1(blinnShader.ColorTextureLocation, 0);
+            GL.Uniform1(blinnShader.NormalTextureLocation, 1);
+            GL.Uniform1(blinnShader.MaterialShininessLocation, 10.0f);
+            var lightDirection = new Vector3(0, 1, 0);
+            lightDirection.Normalize();
+            GL.Uniform3(blinnShader.LightDirectionLocation, lightDirection);
+
+            GL.Uniform4(blinnShader.LightAmbientColorLocation, new Vector4(0.6f, 0.6f, 0.6f, 0));
+            GL.Uniform4(blinnShader.LightDiffuseColorLocation, new Vector4(0.8f, 0.8f, 0.8f, 0));
+            GL.Uniform4(blinnShader.LightSpecularColorLocation, new Vector4(0.0f, 0.0f, 0.0f, 0));
+            GL.Uniform4(blinnShader.CameraPositionLocation, new Vector4(this.camera.Position, 1));
+
+            GL.DrawElements(PrimitiveType.Triangles,
+                            treeMesh.IndicesCount,
+                            DrawElementsType.UnsignedInt,
+                            IntPtr.Zero);
+            GL.BindVertexArray(0);
+            GL.ActiveTexture(TextureUnit.Texture0);
+        }
+
+        private void RenderLeaf()
+        {
+            GL.ActiveTexture(TextureUnit.Texture0);
+            GL.BindTexture(TextureTarget.Texture2D, leafColorTexture.OpenGLHandle);
+            GL.BindVertexArray(leafMesh.VertexArrayObjectHandle);
+            GL.UseProgram(blinnShader.BasicShader.ProgramHandle);
+
+            for(int i = 0; i < this.leaf_positions.Vertices.Length; i++) {
+                //var vertex = new Vector3(0, 0, 0);
+                //var normal = new Vector3(-1, 1, 0) * -1;
+                var vertex = this.leaf_positions.Vertices[i];
+                var normal = this.leaf_positions.Normals[i] * -1;
+                var leafDirection = new Vector3(0, 0, -1);
+                normal.Normalize();
+                var angle = Vector3.CalculateAngle(leafDirection, normal);
+                var angleDegrees = RadiansToDegrees(angle);
+                var rotationAxis = Vector3.Cross(leafDirection, normal);
+                var modelMatrix = Matrix4.CreateFromAxisAngle(rotationAxis, angle) * 
+                                  Matrix4.CreateScale(.1f) *
+                                  Matrix4.CreateTranslation(vertex);
+
+                var modelViewProjection = modelMatrix * 
+                                          this.camera.Transformation * 
+                                          this.camera.PerspectiveProjection;
+                GL.UniformMatrix4(
+                    blinnShader.BasicShader.ModelviewProjectionMatrixLocation,
+                    false,
+                    ref modelViewProjection);
+
+                GL.DrawElements(PrimitiveType.Triangles,
+                                leafMesh.IndicesCount,
+                                DrawElementsType.UnsignedInt,
+                                IntPtr.Zero);
+            }
         }
 
         private void MoveCamera(ref CameraData camera,
@@ -320,80 +399,15 @@ namespace derbaum
             camera.Transformation *= Matrix4.CreateRotationY(camera.YAngle);
         }
 
+        private float RadiansToDegrees(float radians)
+        {
+            var result = (float)((radians * 180) / Math.PI);
+            return result;
+        }
         private float DegreesToRadians(float degree)
         {
             var result = (float)(degree * (Math.PI / 180));
             return result;
-        }
-
-        private void RenderTree()
-        {
-            GL.ActiveTexture(TextureUnit.Texture0);
-            GL.BindTexture(TextureTarget.Texture2D, brownTexture.OpenGLHandle);
-            GL.ActiveTexture(TextureUnit.Texture1);
-            GL.BindTexture(TextureTarget.Texture2D, emptyNormalTexture.OpenGLHandle);
-
-            GL.BindVertexArray(treeMesh.VertexArrayObjectHandle);
-            GL.UseProgram(blinnShader.BasicShader.ProgramHandle);
-
-            Matrix4 modelMatrix = Matrix4.Identity;
-            //modelMatrix = Matrix4.CreateRotationY(this.updateCounter / 100.0f);
-            var modelViewProjection = modelMatrix * this.camera.Transformation * this.camera.PerspectiveProjection;
-            GL.UniformMatrix4(
-                blinnShader.BasicShader.ModelviewProjectionMatrixLocation,
-                false,
-                ref modelViewProjection);
-
-
-            GL.UniformMatrix4(blinnShader.ModelMatrixLocation, false, ref modelMatrix);
-            GL.Uniform1(blinnShader.ColorTextureLocation, 0);
-            GL.Uniform1(blinnShader.NormalTextureLocation, 1);
-            GL.Uniform1(blinnShader.MaterialShininessLocation, 10.0f);
-            var lightDirection = new Vector3(0, 1, 0);
-            lightDirection.Normalize();
-            GL.Uniform3(blinnShader.LightDirectionLocation, lightDirection);
-
-            GL.Uniform4(blinnShader.LightAmbientColorLocation, new Vector4(0.6f, 0.6f, 0.6f, 0));
-            GL.Uniform4(blinnShader.LightDiffuseColorLocation, new Vector4(0.8f, 0.8f, 0.8f, 0));
-            GL.Uniform4(blinnShader.LightSpecularColorLocation, new Vector4(0.0f, 0.0f, 0.0f, 0));
-            GL.Uniform4(blinnShader.CameraPositionLocation, new Vector4(this.camera.Position, 1));
-
-            GL.DrawElements(PrimitiveType.Triangles,
-                            treeMesh.IndicesCount,
-                            DrawElementsType.UnsignedInt,
-                            IntPtr.Zero);
-            GL.BindVertexArray(0);
-            GL.ActiveTexture(TextureUnit.Texture0);
-        }
-
-        private void RenderLeaf(Matrix4 modelViewProjection)
-        {
-            GL.ActiveTexture(TextureUnit.Texture0);
-            GL.BindTexture(TextureTarget.Texture2D, leafColorTexture.OpenGLHandle);
-            GL.ActiveTexture(TextureUnit.Texture1);
-            GL.BindTexture(TextureTarget.Texture2D, leafDispTexture.OpenGLHandle);
-            GL.BindVertexArray(leafMesh.VertexArrayObjectHandle);
-            GL.UseProgram(leafShader.BasicShader.ProgramHandle);
-
-            var transformation = Matrix4.CreateScale(0.2f);
-            transformation *= Matrix4.CreateRotationX(90.0f);
-            GL.UniformMatrix4(
-                leafShader.BasicShader.ModelviewProjectionMatrixLocation,
-                false,
-                ref modelViewProjection);
-            GL.Uniform1(leafShader.DisplacementSamplerLocation, 1);
-            GL.Uniform1(leafShader.DisplacementScalarLocation, 0.2f);
-
-            GL.DrawElements(PrimitiveType.Triangles,
-                            leafMesh.IndicesCount,
-                            DrawElementsType.UnsignedInt,
-                            IntPtr.Zero);
-            GL.ActiveTexture(TextureUnit.Texture0);
-        }
-
-        private void RenderLeafSphere()
-        {
-
         }
 
         private void CheckOpenGlErrors(bool dismiss = false)

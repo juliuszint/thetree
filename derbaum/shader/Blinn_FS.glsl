@@ -21,6 +21,10 @@ out vec4 outputColor;
 
 void main()
 {
+	vec4 surfaceColor = texture(color_texture, fragTexcoord);
+	if(surfaceColor.a < 0.2) {
+		discard;
+	}
 	// calculate normal from texture
     vec3 normal = texture(normalmap_texture, fragTexcoord).rgb;
 	normal = normalize(normal * 2.0 - 1.0); 
@@ -39,9 +43,7 @@ void main()
 
 	// caclulate diffuse_intensity;
 	float diffuse_intensity = clamp(dot(normalize(normal), light_direction), 0, 1);
-	//outputColor = surfaceColor * (light_ambient_color +  diffuse_intensity * light_diffuse_color) + specular_intensity * light_specular_color;
 
-	vec4 surfaceColor = texture(color_texture, fragTexcoord);
 	outputColor = vec4(0, 0, 0, 0);
 	outputColor += surfaceColor * light_ambient_color;
 	outputColor += surfaceColor * light_diffuse_color * diffuse_intensity;
