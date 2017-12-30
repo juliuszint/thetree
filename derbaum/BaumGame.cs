@@ -108,6 +108,7 @@ namespace derbaum
 
         private ObjectVertexData leaf_positions;
         private ImageAssetData leafColorTexture;
+        private ImageAssetData potColorTexture;
         private ImageAssetData brownTexture;
         private ImageAssetData emptyNormalTexture;
         private ImageAssetData rockNormalTexture;
@@ -116,6 +117,7 @@ namespace derbaum
         private MeshAssetData treeMesh;
         private MeshAssetData cubeMesh;
         private MeshAssetData planeMesh;
+        private MeshAssetData potMesh;
         private MeshAssetData icoSphereMesh;
         private CameraData camera;
 
@@ -156,7 +158,11 @@ namespace derbaum
             this.leafColorTexture = new ImageAssetData() {
                 AssetName = "textures/leaf_texture.png"
             };
+            this.potColorTexture = new ImageAssetData() {
+                AssetName = "textures/pot_texture.png"
+            };
             this.LoadImageAsset(ref this.wallNormalTexture);
+            this.LoadImageAsset(ref this.potColorTexture);
             this.LoadImageAsset(ref this.emptyNormalTexture);
             this.LoadImageAsset(ref this.rockNormalTexture);
             this.LoadImageAsset(ref this.leafColorTexture);
@@ -177,11 +183,15 @@ namespace derbaum
             this.icoSphereMesh = new MeshAssetData() {
                 AssetName = "meshes/icosphere.obj"
             };
+            this.potMesh = new MeshAssetData() {
+                AssetName = "meshes/pot.obj"
+            };
             this.LoadMeshData(ref this.treeMesh);
             this.LoadMeshData(ref this.planeMesh);
             this.LoadMeshData(ref this.cubeMesh);
             this.LoadMeshData(ref this.icoSphereMesh);
             this.LoadMeshData(ref this.leafMesh);
+            this.LoadMeshData(ref this.potMesh);
 
             this.leaf_positions = Wavefront.Load("meshes/leaf_positions.obj");
 
@@ -228,6 +238,7 @@ namespace derbaum
             this.UnloadMeshData(this.leafMesh);
             this.UnloadMeshData(this.planeMesh);
             this.UnloadMeshData(this.treeMesh);
+            this.UnloadMeshData(this.potMesh);
             this.UnloadMeshData(this.cubeMesh);
             this.UnloadMeshData(this.icoSphereMesh);
 
@@ -254,24 +265,48 @@ namespace derbaum
             MoveCamera(ref this.camera, (float)e.Time, 6.0f, 1.0f);
             var viewProjection = this.camera.Transformation * this.camera.PerspectiveProjection;
 
-            RenderTree();
-            RenderLeaf();
+            Vector3 treePosition = new Vector3(0, 1.65f, 0);
+            RenderTree(treePosition);
+            //RenderLeaf(treePosition);
+            RenderPot();
 
             CheckOpenGlErrors();
             SwapBuffers();
         }
 
-        private void RenderTree()
+        private void RenderPot()
+        {
+            this.RenderWithBlinn(
+                ref this.potMesh,
+                ref this.potColorTexture,
+                ref this.emptyNormalTexture,
+                new Vector3(0,0,0));
+        }
+
+        private void RenderTree(Vector3 pos)
+        {
+            this.RenderWithBlinn(
+                ref this.treeMesh,
+                ref this.brownTexture,
+                ref this.emptyNormalTexture,
+                pos);
+        }
+
+        private void RenderWithBlinn(
+            ref MeshAssetData mesh,
+            ref ImageAssetData colorTexture,
+            ref ImageAssetData normalTexture,
+            Vector3 location)
         {
             GL.ActiveTexture(TextureUnit.Texture0);
-            GL.BindTexture(TextureTarget.Texture2D, brownTexture.OpenGLHandle);
+            GL.BindTexture(TextureTarget.Texture2D, colorTexture.OpenGLHandle);
             GL.ActiveTexture(TextureUnit.Texture1);
-            GL.BindTexture(TextureTarget.Texture2D, emptyNormalTexture.OpenGLHandle);
+            GL.BindTexture(TextureTarget.Texture2D, normalTexture.OpenGLHandle);
 
-            GL.BindVertexArray(treeMesh.VertexArrayObjectHandle);
+            GL.BindVertexArray(mesh.VertexArrayObjectHandle);
             GL.UseProgram(blinnShader.BasicShader.ProgramHandle);
 
-            Matrix4 modelMatrix = Matrix4.Identity;
+            Matrix4 modelMatrix = Matrix4.Identity * Matrix4.CreateTranslation(location);
             //modelMatrix = Matrix4.CreateRotationY(this.updateCounter / 100.0f);
             var modelViewProjection = modelMatrix * this.camera.Transformation * this.camera.PerspectiveProjection;
             GL.UniformMatrix4(
@@ -283,7 +318,7 @@ namespace derbaum
             GL.Uniform1(blinnShader.ColorTextureLocation, 0);
             GL.Uniform1(blinnShader.NormalTextureLocation, 1);
             GL.Uniform1(blinnShader.MaterialShininessLocation, 10.0f);
-            var lightDirection = new Vector3(0, 1, 0);
+            var lightDirection = new Vector3(0, -1, 0);
             lightDirection.Normalize();
             GL.Uniform3(blinnShader.LightDirectionLocation, lightDirection);
 
@@ -293,14 +328,15 @@ namespace derbaum
             GL.Uniform4(blinnShader.CameraPositionLocation, new Vector4(this.camera.Position, 1));
 
             GL.DrawElements(PrimitiveType.Triangles,
-                            treeMesh.IndicesCount,
+                            mesh.IndicesCount,
                             DrawElementsType.UnsignedInt,
                             IntPtr.Zero);
             GL.BindVertexArray(0);
             GL.ActiveTexture(TextureUnit.Texture0);
+
         }
 
-        private void RenderLeaf()
+        private void RenderLeaf(Vector3 offset)
         {
             GL.ActiveTexture(TextureUnit.Texture0);
             GL.BindTexture(TextureTarget.Texture2D, leafColorTexture.OpenGLHandle);
@@ -319,7 +355,7 @@ namespace derbaum
                 var rotationAxis = Vector3.Cross(leafDirection, normal);
                 var modelMatrix = Matrix4.CreateFromAxisAngle(rotationAxis, angle) * 
                                   Matrix4.CreateScale(.5f) *
-                                  Matrix4.CreateTranslation(vertex);
+                                  Matrix4.CreateTranslation(vertex + offset);
 
                 var modelViewProjection = modelMatrix * 
                                           this.camera.Transformation * 
