@@ -261,13 +261,15 @@ namespace derbaum
         protected override void OnRenderFrame(FrameEventArgs e)
         {
             this.elapsedSeconds += e.Time;
+
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
             MoveCamera(ref this.camera, (float)e.Time, 6.0f, 1.0f);
             var viewProjection = this.camera.Transformation * this.camera.PerspectiveProjection;
 
+            var scale = (float)(((Math.Sin(elapsedSeconds) + 1) / 2) * 1.2);
             Vector3 treePosition = new Vector3(0, 1.65f, 0);
             RenderTree(treePosition);
-            //RenderLeaf(treePosition);
+            RenderLeafs(treePosition, scale);
             RenderPot();
 
             CheckOpenGlErrors();
@@ -336,7 +338,7 @@ namespace derbaum
 
         }
 
-        private void RenderLeaf(Vector3 offset)
+        private void RenderLeafs(Vector3 offset, float scale)
         {
             GL.ActiveTexture(TextureUnit.Texture0);
             GL.BindTexture(TextureTarget.Texture2D, leafColorTexture.OpenGLHandle);
@@ -354,7 +356,7 @@ namespace derbaum
                 var angleDegrees = RadiansToDegrees(angle);
                 var rotationAxis = Vector3.Cross(leafDirection, normal);
                 var modelMatrix = Matrix4.CreateFromAxisAngle(rotationAxis, angle) * 
-                                  Matrix4.CreateScale(.5f) *
+                                  Matrix4.CreateScale(scale) *
                                   Matrix4.CreateTranslation(vertex + offset);
 
                 var modelViewProjection = modelMatrix * 
