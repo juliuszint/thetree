@@ -15,6 +15,29 @@ namespace derbaum
         public int Y;
     }
 
+    public class BoundingBox
+    {
+        public float MinX;
+        public float MaxX;
+        public float MinZ;
+        public float MaxZ;
+        public float MinY;
+        public float MaxY;
+    }
+
+    public class LeafSimulationData
+    {
+        public Vector3 RotationAxis;
+        public float RotationAngle;
+
+        public Vector3 PositionOrigin;
+        public Vector3 Position;
+        public Vector3 Velocity;
+        public float FallDelay;
+        public float LeafScaleOrigin;
+        public float LeafScale;
+    }
+
     public class ObjectVertexData
     {
         public int[]     Indices;
@@ -106,7 +129,6 @@ namespace derbaum
         private BlinnShaderAsset blinnShader;
         private BasicShaderAssetData basicShader;
 
-        private ObjectVertexData leaf_positions;
         private ImageAssetData leafColorTexture;
         private ImageAssetData potColorTexture;
         private ImageAssetData brownTexture;
@@ -120,6 +142,9 @@ namespace derbaum
         private MeshAssetData potMesh;
         private MeshAssetData icoSphereMesh;
         private CameraData camera;
+
+        private LeafSimulationData[] leafSimData;
+        private BoundingBox potBoundingBox;
 
         public DerBaumGameWindow()
             : base(1280, 720,
@@ -191,9 +216,9 @@ namespace derbaum
             this.LoadMeshData(ref this.cubeMesh);
             this.LoadMeshData(ref this.icoSphereMesh);
             this.LoadMeshData(ref this.leafMesh);
-            this.LoadMeshData(ref this.potMesh);
+            this.potBoundingBox = this.LoadMeshData(ref this.potMesh, true);
 
-            this.leaf_positions = Wavefront.Load("meshes/leaf_positions.obj");
+            this.InitLeafSimulationData();
 
             this.basicShader = new BasicShaderAssetData {
                 VertexShaderName = "shader/Leaf_VS.glsl",
@@ -266,8 +291,12 @@ namespace derbaum
             MoveCamera(ref this.camera, (float)e.Time, 6.0f, 1.0f);
             var viewProjection = this.camera.Transformation * this.camera.PerspectiveProjection;
 
-            var scale = (float)(((Math.Sin(elapsedSeconds) + 1) / 2) * 1.2);
+            //var scale = (float)(((Math.Sin(elapsedSeconds) + 1) / 2) * 1.2);
+            var scale = 1;
             Vector3 treePosition = new Vector3(0, 1.65f, 0);
+
+            SimulateLeafs((float)e.Time, (float)this.elapsedSeconds);
+
             RenderTree(treePosition);
             RenderLeafs(treePosition, scale);
             RenderPot();
@@ -345,19 +374,24 @@ namespace derbaum
             GL.BindVertexArray(planeMesh.VertexArrayObjectHandle);
             GL.UseProgram(blinnShader.BasicShader.ProgramHandle);
 
-            for(int i = 0; i < this.leaf_positions.Vertices.Length; i++) {
-                //var vertex = new Vector3(0, 0, 0);
-                //var normal = new Vector3(-1, 1, 0) * -1;
-                var vertex = this.leaf_positions.Vertices[i];
-                var normal = this.leaf_positions.Normals[i] * -1;
-                var leafDirection = new Vector3(0, 0, -1);
-                normal.Normalize();
-                var angle = Vector3.CalculateAngle(leafDirection, normal);
-                var angleDegrees = RadiansToDegrees(angle);
-                var rotationAxis = Vector3.Cross(leafDirection, normal);
-                var modelMatrix = Matrix4.CreateFromAxisAngle(rotationAxis, angle) * 
-                                  Matrix4.CreateScale(scale) *
-                                  Matrix4.CreateTranslation(vertex + offset);
+            GL.Uniform4(blinnShader.LightAmbientColorLocation, new Vector4(0.8f, 0.8f, 0.8f, 0));
+            GL.Uniform4(blinnShader.LightDiffuseColorLocation, new Vector4(0.9f, 0.9f, 0.9f, 0));
+            GL.Uniform4(blinnShader.LightSpecularColorLocation, new Vector4(0.0f, 0.0f, 0.0f, 0));
+            GL.Uniform4(blinnShader.CameraPositionLocation, new Vector4(this.camera.Position, 1));
+
+            var lightDirection = new Vector3(0, -1, 0);
+            lightDirection.Normalize();
+            GL.Uniform3(blinnShader.LightDirectionLocation, lightDirection);
+
+            GL.Uniform1(blinnShader.ColorTextureLocation, 0);
+            GL.Uniform1(blinnShader.NormalTextureLocation, 1);
+            GL.Uniform1(blinnShader.MaterialShininessLocation, 10.0f);
+
+            for(int i = 0; i < this.leafSimData.Length; i++) {
+                var simData = this.leafSimData[i];
+                var modelMatrix = Matrix4.CreateFromAxisAngle(simData.RotationAxis, simData.RotationAngle) * 
+                                  Matrix4.CreateScale(simData.LeafScale) *
+                                  Matrix4.CreateTranslation(simData.Position + offset);
 
                 var modelViewProjection = modelMatrix * 
                                           this.camera.Transformation * 
@@ -368,17 +402,6 @@ namespace derbaum
                     ref modelViewProjection);
 
                 GL.UniformMatrix4(blinnShader.ModelMatrixLocation, false, ref modelMatrix);
-                GL.Uniform1(blinnShader.ColorTextureLocation, 0);
-                GL.Uniform1(blinnShader.NormalTextureLocation, 1);
-                GL.Uniform1(blinnShader.MaterialShininessLocation, 10.0f);
-                var lightDirection = new Vector3(0, 1, 0);
-                lightDirection.Normalize();
-                GL.Uniform3(blinnShader.LightDirectionLocation, lightDirection);
-
-                GL.Uniform4(blinnShader.LightAmbientColorLocation, new Vector4(0.8f, 0.8f, 0.8f, 0));
-                GL.Uniform4(blinnShader.LightDiffuseColorLocation, new Vector4(0.9f, 0.9f, 0.9f, 0));
-                GL.Uniform4(blinnShader.LightSpecularColorLocation, new Vector4(0.0f, 0.0f, 0.0f, 0));
-                GL.Uniform4(blinnShader.CameraPositionLocation, new Vector4(this.camera.Position, 1));
 
                 GL.DrawElements(PrimitiveType.Triangles,
                                 planeMesh.IndicesCount,
@@ -448,6 +471,37 @@ namespace derbaum
                 -camera.Position.Z);
             camera.Transformation *= Matrix4.CreateRotationX(camera.XAngle);
             camera.Transformation *= Matrix4.CreateRotationY(camera.YAngle);
+        }
+
+        private void SimulateLeafs(float timeDelta, float fTime)
+        {
+            for(int i = 0; i < this.leafSimData.Length; i++) {
+                var simData = this.leafSimData[i];
+                var distance_delta = timeDelta * this.leafSimData[i].Velocity;
+                var collisionOffsetForVertices = -potBoundingBox.MaxY;
+                if(IsOverFlowerPot(this.leafSimData[i].Position)) {
+                    collisionOffsetForVertices = 0;
+                }
+
+                if(simData.Position.Y <= collisionOffsetForVertices) {
+                    continue;
+                }
+                else if((simData.FallDelay * 10 - fTime) < 0) {
+                    this.leafSimData[i].Position -= distance_delta;
+                }
+            }
+        }
+
+        private bool IsOverFlowerPot(Vector3 v)
+        {
+            var result = false;
+            if(v.X > potBoundingBox.MinX &&
+               v.X < potBoundingBox.MaxX &&
+               v.Z > potBoundingBox.MinZ &&
+               v.Z < potBoundingBox.MaxZ) {
+                result = true;
+            }
+            return result;
         }
 
         private float RadiansToDegrees(float radians)
@@ -609,15 +663,28 @@ namespace derbaum
             shaderAsset.IsLoaded = false;
         }
 
-        private void LoadMeshData(ref MeshAssetData meshAsset)
+        private BoundingBox LoadMeshData(ref MeshAssetData meshAsset, bool calcBoundingBox = false)
         {
+            var result = new BoundingBox();
             if (meshAsset.IsLoaded)
-                return;
+                return result;
 
             var planeMesh = Wavefront.Load(meshAsset.AssetName);
+            if(calcBoundingBox) {
+                for(int i = 0; i < planeMesh.Vertices.Length; i++) {
+                    result.MaxX = Math.Max(planeMesh.Vertices[i].X, result.MaxX);
+                    result.MinX = Math.Min(planeMesh.Vertices[i].X, result.MinX);
+                    result.MaxZ = Math.Max(planeMesh.Vertices[i].Z, result.MaxZ);
+                    result.MinZ = Math.Min(planeMesh.Vertices[i].Z, result.MinZ);
+                    result.MaxY = Math.Max(planeMesh.Vertices[i].Y, result.MaxY);
+                    result.MinY = Math.Min(planeMesh.Vertices[i].Y, result.MinY);
+                }
+            }
+
             PushMeshToGPUBuffer(planeMesh, ref meshAsset);
             meshAsset.IndicesCount = planeMesh.Indices.Length;
             meshAsset.IsLoaded = true;
+            return result;
         }
 
         private void UnloadMeshData(MeshAssetData meshAsset)
@@ -777,5 +844,40 @@ namespace derbaum
             }
         }
 
+        private void InitLeafSimulationData()
+        {
+            var random = new Random(43523);
+            var leafPositionsSource = Wavefront.LoadPlain("meshes/leaf_positions.obj");
+            this.leafSimData = new LeafSimulationData[leafPositionsSource.Vertices.Length];
+            for(int i = 0; i < leafPositionsSource.Vertices.Length; i++) {
+                var distorationFactor = .7f;
+                var vertex = leafPositionsSource.Vertices[i];
+                var normal = leafPositionsSource.Normals[i] * -1;
+                var leafDirection = new Vector3(0, 0, -1);
+                normal.Normalize();
+                var angle = Vector3.CalculateAngle(leafDirection, normal);
+                var angleDegrees = RadiansToDegrees(angle);
+                var rotationAxis = Vector3.Cross(leafDirection, normal);
+                this.leafSimData[i] = new LeafSimulationData();
+                this.leafSimData[i].RotationAngle = angle;
+                this.leafSimData[i].RotationAxis = rotationAxis;
+                this.leafSimData[i].PositionOrigin = leafPositionsSource.Vertices[i];
+                this.leafSimData[i].Position = leafPositionsSource.Vertices[i];
+                this.leafSimData[i].FallDelay = (float)random.NextDouble();
+                this.leafSimData[i].LeafScaleOrigin = Math.Min((float)random.NextDouble() * 2.5f, 1.2f);
+                this.leafSimData[i].LeafScale = this.leafSimData[i].LeafScaleOrigin;
+                this.leafSimData[i].Velocity = new Vector3(
+                    (float)(random.NextDouble() - 0.5f) * distorationFactor,
+                    1,
+                    (float)(random.NextDouble() - 0.5f) * distorationFactor);
+            }
+        }
+
+        private void ResetSimulationData()
+        {
+            for (int i = 0; i < this.leafSimData.Length; i++) {
+                this.leafSimData[i].Position = this.leafSimData[i].PositionOrigin;
+            }
+        }
     }
 }

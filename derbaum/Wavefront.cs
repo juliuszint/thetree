@@ -38,6 +38,16 @@ namespace derbaum
             public WavefrontFace[] Triangles;
         }
 
+        public static ObjectVertexData LoadPlain(string fileName)
+        {
+            var stringContent = File.ReadAllText(fileName);
+            var textContent = SplitStringContent(stringContent);
+            var inMemoryWavefront = AllocateMemoryForFile(textContent);
+            ParseFile(inMemoryWavefront, textContent);
+            var result = CreatePlainVertexData(inMemoryWavefront);
+            return result;
+        }
+
         public static ObjectVertexData Load(string fileName)
         {
             var stringContent = File.ReadAllText(fileName);
@@ -113,6 +123,20 @@ namespace derbaum
                 data.Triangles[i].Tangent = tangent;
                 data.Triangles[i].Bitangent = biTangent;
             }
+        }
+
+        private static ObjectVertexData CreatePlainVertexData(WavefrontFileData data)
+        {
+            var result = new ObjectVertexData();
+            result.Vertices = new Vector3[data.Vertices.Length];
+            result.Normals = new Vector3[data.Normals.Length];
+
+            for(int i = 0; i < data.Vertices.Length; i++) {
+                result.Vertices[i] = data.Vertices[i];
+                result.Normals[i] = data.Normals[i];
+            }
+
+            return result;
         }
 
         private static ObjectVertexData CreateVertexDataObject(WavefrontFileData data)
