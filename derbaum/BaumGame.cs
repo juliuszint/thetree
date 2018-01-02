@@ -106,13 +106,15 @@ namespace derbaum
     {
         public BasicShaderAssetData BasicShader;
         public int ModelMatrixLocation;
-        public int ColorTextureLocation;
+        public int ColorTextureLocationOne;
+        public int ColorTextureLocationTwo;
         public int NormalTextureLocation;
         public int MaterialShininessLocation;
         public int LightDirectionLocation;
         public int LightAmbientColorLocation;
         public int LightDiffuseColorLocation;
         public int LightSpecularColorLocation;
+        public int TextureFraction;
         public int CameraPositionLocation;
     }
 
@@ -400,12 +402,17 @@ namespace derbaum
 
         private void RenderLeafs(Vector3 offset, float scale)
         {
+            GL.BindVertexArray(planeMesh.VertexArrayObjectHandle);
+            GL.UseProgram(leafShader.BasicShader.ProgramHandle);
             GL.ActiveTexture(TextureUnit.Texture0);
             GL.BindTexture(TextureTarget.Texture2D, leafColorTextureGreen.OpenGLHandle);
             GL.ActiveTexture(TextureUnit.Texture1);
+            GL.BindTexture(TextureTarget.Texture2D, leafColorTextureYellow.OpenGLHandle);
+            GL.ActiveTexture(TextureUnit.Texture2);
             GL.BindTexture(TextureTarget.Texture2D, emptyNormalTexture.OpenGLHandle);
-            GL.BindVertexArray(planeMesh.VertexArrayObjectHandle);
-            GL.UseProgram(leafShader.BasicShader.ProgramHandle);
+            GL.Uniform1(leafShader.ColorTextureLocationOne, 0);
+            GL.Uniform1(leafShader.ColorTextureLocationTwo, 1);
+            GL.Uniform1(leafShader.NormalTextureLocation, 2);
 
             GL.Uniform4(leafShader.LightAmbientColorLocation, new Vector4(0.8f, 0.8f, 0.8f, 0));
             GL.Uniform4(leafShader.LightDiffuseColorLocation, new Vector4(0.9f, 0.9f, 0.9f, 0));
@@ -413,8 +420,7 @@ namespace derbaum
             GL.Uniform4(leafShader.CameraPositionLocation, new Vector4(this.camera.Position, 1));
             GL.Uniform3(leafShader.LightDirectionLocation, ambientLightDirection);
 
-            GL.Uniform1(leafShader.ColorTextureLocation, 0);
-            GL.Uniform1(leafShader.NormalTextureLocation, 1);
+            GL.Uniform1(leafShader.TextureFraction, .5f);
             GL.Uniform1(leafShader.MaterialShininessLocation, 0.0f);
 
             for(int i = 0; i < this.leafSimData.Length; i++) {
@@ -673,12 +679,14 @@ namespace derbaum
 
             shader.ModelMatrixLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "model_matrix");
             shader.MaterialShininessLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "specular_shininess");
+            shader.TextureFraction = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "texture_fraction");
             shader.LightDirectionLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "light_direction");
             shader.LightAmbientColorLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "light_ambient_color");
             shader.LightDiffuseColorLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "light_diffuse_color");
             shader.LightSpecularColorLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "light_specular_color");
             shader.CameraPositionLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "camera_position");
-            shader.ColorTextureLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "color_texture");
+            shader.ColorTextureLocationOne = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "color_texture_one");
+            shader.ColorTextureLocationTwo = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "color_texture_two");
             shader.NormalTextureLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "normalmap_texture");
         }
 

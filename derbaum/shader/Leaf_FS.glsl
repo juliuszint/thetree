@@ -1,7 +1,8 @@
 #version 330
 precision highp float;
 
-uniform sampler2D color_texture;
+uniform sampler2D color_texture_one;
+uniform sampler2D color_texture_two;
 uniform sampler2D normalmap_texture;
 
 uniform mat4 model_matrix;
@@ -12,6 +13,7 @@ uniform vec4 light_diffuse_color;
 uniform vec4 light_specular_color;
 uniform vec4 camera_position;
 uniform float specular_shininess;
+uniform float texture_fraction;
 
 in vec2 fragTexcoord;
 in mat3 fragTBN;
@@ -21,8 +23,9 @@ out vec4 outputColor;
 
 void main()
 {
-	vec4 surfaceColor = texture(color_texture, fragTexcoord);
-	if(surfaceColor.a < 0.2) {
+	vec4 surfaceColor_one = texture(color_texture_one, fragTexcoord);
+	vec4 surfaceColor_two = texture(color_texture_two, fragTexcoord);
+	if(surfaceColor_one.a < 0.2) {
 		discard;
 	}
 	// calculate normal from texture
@@ -44,6 +47,7 @@ void main()
 	// caclulate diffuse_intensity;
 	float diffuse_intensity = clamp(dot(normalize(normal), light_direction), 0, 1);
 
+	vec4 surfaceColor = mix(surfaceColor_one, surfaceColor_two, texture_fraction);
 	outputColor = vec4(0, 0, 0, 0);
 	outputColor += surfaceColor * light_ambient_color;
 	outputColor += surfaceColor * light_diffuse_color * diffuse_intensity;
