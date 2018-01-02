@@ -105,8 +105,15 @@ namespace derbaum
     public struct LeafShaderAsset
     {
         public BasicShaderAssetData BasicShader;
-        public int DisplacementSamplerLocation;
-        public int DisplacementScalarLocation;
+        public int ModelMatrixLocation;
+        public int ColorTextureLocation;
+        public int NormalTextureLocation;
+        public int MaterialShininessLocation;
+        public int LightDirectionLocation;
+        public int LightAmbientColorLocation;
+        public int LightDiffuseColorLocation;
+        public int LightSpecularColorLocation;
+        public int CameraPositionLocation;
     }
 
     public struct CameraData
@@ -375,20 +382,20 @@ namespace derbaum
             GL.ActiveTexture(TextureUnit.Texture1);
             GL.BindTexture(TextureTarget.Texture2D, emptyNormalTexture.OpenGLHandle);
             GL.BindVertexArray(planeMesh.VertexArrayObjectHandle);
-            GL.UseProgram(blinnShader.BasicShader.ProgramHandle);
+            GL.UseProgram(leafShader.BasicShader.ProgramHandle);
 
-            GL.Uniform4(blinnShader.LightAmbientColorLocation, new Vector4(0.8f, 0.8f, 0.8f, 0));
-            GL.Uniform4(blinnShader.LightDiffuseColorLocation, new Vector4(0.9f, 0.9f, 0.9f, 0));
-            GL.Uniform4(blinnShader.LightSpecularColorLocation, new Vector4(0.0f, 0.0f, 0.0f, 0));
-            GL.Uniform4(blinnShader.CameraPositionLocation, new Vector4(this.camera.Position, 1));
+            GL.Uniform4(leafShader.LightAmbientColorLocation, new Vector4(0.8f, 0.8f, 0.8f, 0));
+            GL.Uniform4(leafShader.LightDiffuseColorLocation, new Vector4(0.9f, 0.9f, 0.9f, 0));
+            GL.Uniform4(leafShader.LightSpecularColorLocation, new Vector4(0.0f, 0.0f, 0.0f, 0.0f));
+            GL.Uniform4(leafShader.CameraPositionLocation, new Vector4(this.camera.Position, 1));
 
             var lightDirection = new Vector3(0, 1, 0);
             lightDirection.Normalize();
-            GL.Uniform3(blinnShader.LightDirectionLocation, lightDirection);
+            GL.Uniform3(leafShader.LightDirectionLocation, lightDirection);
 
-            GL.Uniform1(blinnShader.ColorTextureLocation, 0);
-            GL.Uniform1(blinnShader.NormalTextureLocation, 1);
-            GL.Uniform1(blinnShader.MaterialShininessLocation, 10.0f);
+            GL.Uniform1(leafShader.ColorTextureLocation, 0);
+            GL.Uniform1(leafShader.NormalTextureLocation, 1);
+            GL.Uniform1(leafShader.MaterialShininessLocation, 0.0f);
 
             for(int i = 0; i < this.leafSimData.Length; i++) {
                 var simData = this.leafSimData[i];
@@ -400,11 +407,11 @@ namespace derbaum
                                           this.camera.Transformation * 
                                           this.camera.PerspectiveProjection;
                 GL.UniformMatrix4(
-                    blinnShader.BasicShader.ModelviewProjectionMatrixLocation,
+                    leafShader.BasicShader.ModelviewProjectionMatrixLocation,
                     false,
                     ref modelViewProjection);
 
-                GL.UniformMatrix4(blinnShader.ModelMatrixLocation, false, ref modelMatrix);
+                GL.UniformMatrix4(leafShader.ModelMatrixLocation, false, ref modelMatrix);
 
                 GL.DrawElements(PrimitiveType.Triangles,
                                 planeMesh.IndicesCount,
@@ -641,14 +648,18 @@ namespace derbaum
         private void LoadLeafShaderAsset(ref LeafShaderAsset shader)
         {
             this.LoadShaderAsset(ref shader.BasicShader);
-            shader.DisplacementSamplerLocation = GL.GetUniformLocation(
-                shader.BasicShader.ProgramHandle,
-                "displacement_sampler");
-            shader.DisplacementScalarLocation = GL.GetUniformLocation(
-                shader.BasicShader.ProgramHandle,
-                "displacement_scalar");
-            //Console.WriteLine($"displacement_sampler: {shader.DisplacementSamplerLocation}");
-            //Console.WriteLine($"displacement_scalar: {shader.DisplacementScalarLocation}");
+            GL.BindAttribLocation(shader.BasicShader.ProgramHandle, VertexAttribIndex.Tangent, "in_tangent");
+            GL.BindAttribLocation(shader.BasicShader.ProgramHandle, VertexAttribIndex.Bitangent, "in_bitangent");
+
+            shader.ModelMatrixLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "model_matrix");
+            shader.MaterialShininessLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "specular_shininess");
+            shader.LightDirectionLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "light_direction");
+            shader.LightAmbientColorLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "light_ambient_color");
+            shader.LightDiffuseColorLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "light_diffuse_color");
+            shader.LightSpecularColorLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "light_specular_color");
+            shader.CameraPositionLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "camera_position");
+            shader.ColorTextureLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "color_texture");
+            shader.NormalTextureLocation = GL.GetUniformLocation(shader.BasicShader.ProgramHandle, "normalmap_texture");
         }
 
         private void UnloadLeafShaderAsset(LeafShaderAsset shader)

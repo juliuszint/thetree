@@ -26,4 +26,3 @@ void main()
 	fragPosition = vec4(in_position, 1);
 	gl_Position = modelview_projection_matrix * vec4(in_position, 1);
 }
-

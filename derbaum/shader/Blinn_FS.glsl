@@ -38,7 +38,7 @@ void main()
 
 	// calculate halfway vector
 	vec3 h = normalize(light_direction + vec3(v));
-	float ndoth = dot( normal, h );
+	float ndoth = dot(normal, h);
 	float specular_intensity = pow(ndoth, specular_shininess);
 
 	// caclulate diffuse_intensity;

@@ -1,21 +1,28 @@
-#version 130
+#version 330
 precision highp float;
 
+// input aus der VAO-Datenstruktur
 in vec3 in_position;
 in vec3 in_normal; 
 in vec2 in_uv; 
+in vec3 in_tangent;
+in vec3 in_bitangent;
 
-uniform sampler2D displacement_sampler; 
-uniform float displacement_scalar;
 uniform mat4 modelview_projection_matrix;
+uniform mat4 model_matrix;
 
-out vec2 texcoord;
+out vec2 fragTexcoord;
+out vec4 fragPosition;
+out mat3 fragTBN;
 
 void main()
 {
-	texcoord = in_uv;
-    vec4 displacement_color = texture2D(displacement_sampler, texcoord);
-    vec4 position = vec4(in_position, 1);
-	position.y += (0.5 - displacement_color.x) * displacement_scalar;
-	gl_Position = modelview_projection_matrix * position;
+	vec3 T = normalize(vec3(model_matrix * vec4(in_tangent, 0.0)));
+    vec3 B = normalize(vec3(model_matrix * vec4(in_bitangent, 0.0)));
+    vec3 N = normalize(vec3(model_matrix * vec4(in_normal, 0.0)));
+
+    fragTBN = mat3(T, B, N);
+	fragTexcoord = in_uv;
+	fragPosition = vec4(in_position, 1);
+	gl_Position = modelview_projection_matrix * vec4(in_position, 1);
 }
