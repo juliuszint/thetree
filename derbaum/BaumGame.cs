@@ -25,6 +25,14 @@ namespace derbaum
         public float MaxY;
     }
 
+    public enum LeafColor
+    {
+        Green,
+        Yellow,
+        Red,
+        Brown,
+    }
+
     public class LeafSimulationData
     {
         public Vector3 RotationAxis;
@@ -36,6 +44,11 @@ namespace derbaum
         public float FallDelay;
         public float LeafScaleOrigin;
         public float LeafScale;
+
+        public float ColorEntropy;
+        public LeafColor PrimaryLeafColor;
+        public LeafColor SecondaryLeafColor;
+        public float LeafColorFraction;
     }
 
     public class ObjectVertexData
@@ -404,10 +417,6 @@ namespace derbaum
         {
             GL.BindVertexArray(planeMesh.VertexArrayObjectHandle);
             GL.UseProgram(leafShader.BasicShader.ProgramHandle);
-            GL.ActiveTexture(TextureUnit.Texture0);
-            GL.BindTexture(TextureTarget.Texture2D, leafColorTextureGreen.OpenGLHandle);
-            GL.ActiveTexture(TextureUnit.Texture1);
-            GL.BindTexture(TextureTarget.Texture2D, leafColorTextureYellow.OpenGLHandle);
             GL.ActiveTexture(TextureUnit.Texture2);
             GL.BindTexture(TextureTarget.Texture2D, emptyNormalTexture.OpenGLHandle);
             GL.Uniform1(leafShader.ColorTextureLocationOne, 0);
@@ -420,7 +429,6 @@ namespace derbaum
             GL.Uniform4(leafShader.CameraPositionLocation, new Vector4(this.camera.Position, 1));
             GL.Uniform3(leafShader.LightDirectionLocation, ambientLightDirection);
 
-            GL.Uniform1(leafShader.TextureFraction, .5f);
             GL.Uniform1(leafShader.MaterialShininessLocation, 0.0f);
 
             for(int i = 0; i < this.leafSimData.Length; i++) {
@@ -437,7 +445,14 @@ namespace derbaum
                     false,
                     ref modelViewProjection);
 
+                var primaryTextureHandle = this.ToTextureHandle(simData.PrimaryLeafColor);
+                var secondaryTextureHandle = this.ToTextureHandle(simData.SecondaryLeafColor);
+                GL.ActiveTexture(TextureUnit.Texture0);
+                GL.BindTexture(TextureTarget.Texture2D, primaryTextureHandle);
+                GL.ActiveTexture(TextureUnit.Texture1);
+                GL.BindTexture(TextureTarget.Texture2D, secondaryTextureHandle);
                 GL.UniformMatrix4(leafShader.ModelMatrixLocation, false, ref modelMatrix);
+                GL.Uniform1(leafShader.TextureFraction, simData.LeafColorFraction);
 
                 GL.DrawElements(PrimitiveType.Triangles,
                                 planeMesh.IndicesCount,
@@ -514,12 +529,17 @@ namespace derbaum
             if (this.elapsedSeconds < 1) {
                 return;
             }
-            Vector2 leafGrowTime = new Vector2(0, 2);
-            Vector2 summerTime = new Vector2(leafGrowTime.Y, leafGrowTime.Y + 3);
-            Vector2 leafFallTime = new Vector2(summerTime.Y, summerTime.Y + 10);
-            Vector2 leafDisappearTime = new Vector2(leafFallTime.Y, leafFallTime.Y + 2);
-            Vector2 winterTime = new Vector2(leafDisappearTime.Y, leafDisappearTime.Y + 1);
+
+            Vector2 leafGrowTime      = new Vector2(0 , 2);
+            Vector2 summerTime        = new Vector2(2 , 5);
+            Vector2 leafFallTime      = new Vector2(5 , 15);
+            Vector2 leafDisappearTime = new Vector2(15, 17);
+            Vector2 winterTime        = new Vector2(17, 18);
             float intervalTime = winterTime.Y;
+            
+            Vector2 greenYellowColorInterval = new Vector2(3, 6);
+            Vector2 yellowRedColorInterval   = new Vector2(6, 10);
+            Vector2 redBrownColorInterval    = new Vector2(10, 13);
 
             bool updateScale = false;
             bool updatePosition = false;
@@ -552,6 +572,28 @@ namespace derbaum
                 }
                 if(updatePosition) {
                     MoveLeaf(i);
+                }
+
+                var colorTime = simTime + ((entry.ColorEntropy * 4.0f) - 2.0f);
+                colorTime = Math.Min(colorTime, intervalTime);
+                colorTime = Math.Max(colorTime, 0);
+                var greenYellowFraction = IsInTimeInterval(greenYellowColorInterval, colorTime);
+                if(greenYellowFraction >= 0) {
+                    this.leafSimData[i].LeafColorFraction = greenYellowFraction;
+                    this.leafSimData[i].PrimaryLeafColor = LeafColor.Green; 
+                    this.leafSimData[i].SecondaryLeafColor = LeafColor.Yellow; 
+                }
+                var yellowRedFraction = IsInTimeInterval(yellowRedColorInterval, colorTime);
+                if(yellowRedFraction >= 0) {
+                    this.leafSimData[i].LeafColorFraction = yellowRedFraction;
+                    this.leafSimData[i].PrimaryLeafColor = LeafColor.Yellow; 
+                    this.leafSimData[i].SecondaryLeafColor = LeafColor.Red; 
+                }
+                var redBrownFraction = IsInTimeInterval(redBrownColorInterval, colorTime);
+                if(redBrownFraction >= 0) {
+                    this.leafSimData[i].LeafColorFraction = redBrownFraction;
+                    this.leafSimData[i].PrimaryLeafColor = LeafColor.Red; 
+                    this.leafSimData[i].SecondaryLeafColor = LeafColor.Brown; 
                 }
             }
 
@@ -963,6 +1005,7 @@ namespace derbaum
                 this.leafSimData[i].FallDelay = (float)random.NextDouble();
                 this.leafSimData[i].LeafScaleOrigin = Math.Min((float)random.NextDouble() * 2.5f, 1.2f);
                 this.leafSimData[i].LeafScale = 0;
+                this.leafSimData[i].ColorEntropy = (float)random.NextDouble();
                 this.leafSimData[i].Velocity = new Vector3(
                     (float)(random.NextDouble() - 0.5f) * distorationFactor,
                     1,
@@ -975,6 +1018,26 @@ namespace derbaum
             for (int i = 0; i < this.leafSimData.Length; i++) {
                 this.leafSimData[i].Position = this.leafSimData[i].PositionOrigin;
             }
+        }
+
+        private int ToTextureHandle(LeafColor color)
+        {
+            var result = this.leafColorTextureGreen.OpenGLHandle;
+            switch(color) {
+                case LeafColor.Green:
+                    result = this.leafColorTextureGreen.OpenGLHandle;
+                    break;
+                case LeafColor.Yellow:
+                    result = this.leafColorTextureYellow.OpenGLHandle;
+                    break;
+                case LeafColor.Red:
+                    result = this.leafColorTextureRed.OpenGLHandle;
+                    break;
+                case LeafColor.Brown:
+                    result = this.leafColorTextureBrown.OpenGLHandle;
+                    break;
+            }
+            return result;
         }
     }
 }
