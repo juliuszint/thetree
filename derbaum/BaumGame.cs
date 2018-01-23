@@ -144,6 +144,7 @@ namespace derbaum
     public class DerBaumGameWindow : GameWindow
     {
         private bool toggleFullScreen;
+        private bool cameraOverride;
         private int updateCounter = 1;
         private double elapsedSeconds = 0;
 
@@ -337,7 +338,12 @@ namespace derbaum
             this.elapsedSeconds += e.Time;
 
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-            MoveCamera(ref this.camera, (float)e.Time, 6.0f, 1.0f);
+            if(cameraOverride) {
+                MoveCamera(ref this.camera, (float)e.Time, 6.0f, 1.0f);
+            }
+            else {
+                RotateCamera(ref this.camera);
+            }
             var viewProjection = this.camera.Transformation * this.camera.PerspectiveProjection;
 
             //var scale = (float)(((Math.Sin(elapsedSeconds) + 1) / 2) * 1.2);
@@ -461,6 +467,13 @@ namespace derbaum
             }
         }
 
+        private void RotateCamera(ref CameraData camera)
+        {
+            var transformation = Matrix4.CreateRotationY((float)this.elapsedSeconds / 3);
+            transformation *= Matrix4.CreateTranslation(new Vector3(0, -3, -10));
+            camera.Transformation = transformation;
+        }
+
         private void MoveCamera(ref CameraData camera,
                                 float fTimeDelta,
                                 float translationSens,
@@ -552,7 +565,7 @@ namespace derbaum
 
             var relGrowTime = IsInTimeInterval(leafGrowTime, simTime);
             if(relGrowTime >= 0) {
-                scaleFactor = relGrowTime;
+                scaleFactor = relGrowTime * relGrowTime;
                 updateScale = true;
             }
             var relLeafFallTime = IsInTimeInterval(leafFallTime, simTime);
@@ -561,7 +574,8 @@ namespace derbaum
             }
             var relLeafDisappearTime = IsInTimeInterval(leafDisappearTime, simTime);
             if(relLeafDisappearTime >= 0) {
-                scaleFactor = 1 - relLeafDisappearTime;
+                var inverse = 1 - relLeafDisappearTime;
+                scaleFactor = inverse * inverse;
                 updateScale = true;
             }
 
@@ -571,10 +585,10 @@ namespace derbaum
                     this.leafSimData[i].LeafScale = entry.LeafScaleOrigin * scaleFactor; 
                 }
                 if(updatePosition) {
-                    MoveLeaf(i);
+                    this.MoveLeaf(i, timeDelta, fTime);
                 }
 
-                var colorTime = simTime + ((entry.ColorEntropy * 4.0f) - 2.0f);
+                var colorTime = simTime + ((entry.ColorEntropy * 6.0f) - 2.0f);
                 colorTime = Math.Min(colorTime, intervalTime);
                 colorTime = Math.Max(colorTime, 0);
                 var greenYellowFraction = IsInTimeInterval(greenYellowColorInterval, colorTime);
@@ -596,24 +610,24 @@ namespace derbaum
                     this.leafSimData[i].SecondaryLeafColor = LeafColor.Brown; 
                 }
             }
+        }
 
-            void MoveLeaf(int index)
-            {
-                var simData = this.leafSimData[index];
-                var distance_delta = timeDelta * this.leafSimData[index].Velocity;
-                var collisionOffsetForVertices = -potBoundingBox.MaxY;
-                if(IsOverFlowerPot(this.leafSimData[index].Position)) {
-                    collisionOffsetForVertices = 0;
-                }
-
-                if(simData.Position.Y <= collisionOffsetForVertices) {
-                    return;
-                }
-                else if((simData.FallDelay * 10 - fTime) < 0) {
-                    this.leafSimData[index].Position -= distance_delta;
-                }
-
+        private void MoveLeaf(int index, float timeDelta, float fTime)
+        {
+            var simData = this.leafSimData[index];
+            var distance_delta = timeDelta * this.leafSimData[index].Velocity;
+            var collisionOffsetForVertices = -potBoundingBox.MaxY;
+            if(IsOverFlowerPot(this.leafSimData[index].Position)) {
+                collisionOffsetForVertices = 0;
             }
+
+            if(simData.Position.Y <= collisionOffsetForVertices) {
+                return;
+            }
+            else if((simData.FallDelay * 10 - fTime) < 0) {
+                this.leafSimData[index].Position -= distance_delta;
+            }
+
         }
 
         private float IsInTimeInterval(Vector2 interval, float time)
@@ -934,6 +948,9 @@ namespace derbaum
             if (e.Key == Key.Enter && e.Modifiers == KeyModifiers.Alt) {
                 this.toggleFullScreen = true;
             }
+            if(e.Key == Key.Space) {
+                this.cameraOverride = true;
+            }
             else {
                 base.OnKeyDown(e);
             }
@@ -1017,6 +1034,9 @@ namespace derbaum
         {
             for (int i = 0; i < this.leafSimData.Length; i++) {
                 this.leafSimData[i].Position = this.leafSimData[i].PositionOrigin;
+                this.leafSimData[i].LeafColorFraction = 0;
+                this.leafSimData[i].PrimaryLeafColor = LeafColor.Green; 
+                this.leafSimData[i].SecondaryLeafColor = LeafColor.Green; 
             }
         }
 
