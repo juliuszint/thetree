@@ -1,11 +1,10 @@
 ﻿using System;
-using OpenTK;
-using OpenTK.Graphics;
 using OpenTK.Graphics.OpenGL;
-using OpenTK.Input;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
+using OpenTK.Mathematics;
+using OpenTK.Windowing.Desktop;
+using OpenTK.Windowing.Common;
+using OpenTK.Windowing.GraphicsLibraryFramework;
 
 namespace derbaum
 {
@@ -175,24 +174,19 @@ namespace derbaum
         private LeafSimulationData[] leafSimData;
         private BoundingBox potBoundingBox;
 
-        public DerBaumGameWindow()
-            : base(1280, 720,
-                  new GraphicsMode(),
-                  "Der Baum",
-                  GameWindowFlags.Default,
-                  DisplayDevice.Default,
-                  3,
-                  0,
-                  GraphicsContextFlags.ForwardCompatible | GraphicsContextFlags.Debug)
+
+        public DerBaumGameWindow(GameWindowSettings s, NativeWindowSettings ns)
+            : base(s, ns)
+            
         {
-            this.Location = new Point(900, 350);
         }
 
-        protected override void OnLoad(EventArgs e)
+
+        protected override void OnLoad()
         {
             int tick = Environment.TickCount;
             Console.WriteLine("begin loading assets");
-            base.OnLoad(e);
+            base.OnLoad();
             EnsureOpenGlVersion();
             EnsureVertexTextureUnits();
             EnsureVertexUniformComponents();
@@ -299,7 +293,7 @@ namespace derbaum
             Console.WriteLine($"done loading assets in: {time / 1000.0}s");
         }
 
-        protected override void OnUnload(EventArgs e)
+        protected override void OnUnload()
         {
             this.UnloadImageAsset(this.emptyNormalTexture);
             this.UnloadImageAsset(this.brownTexture);
@@ -321,11 +315,11 @@ namespace derbaum
             this.UnloadShaderAsset(this.basicShader);
         }
 
-        protected override void OnResize(EventArgs e)
+        protected override void OnResize(ResizeEventArgs e)
         {
             var fov = 60;
-            GL.Viewport(0, 0, Width, Height);
-            float aspectRatio = Width / (float)Height;
+            GL.Viewport(0, 0, e.Width, e.Height);
+            float aspectRatio = e.Width / (float)e.Height;
             Matrix4.CreatePerspectiveFieldOfView((float)(fov * Math.PI / 180.0f),
                                                  aspectRatio,
                                                  1,
@@ -479,52 +473,52 @@ namespace derbaum
                                 float translationSens,
                                 float rotationSens)
         {
-            if(Keyboard[Key.A]) {
+            if(KeyboardState[Keys.A]) {
                 var ortho = Vector3.Cross(
                     camera.Transformation.Column1.Xyz,
                     camera.Transformation.Column2.Xyz);
                 camera.Position -= ortho * translationSens * fTimeDelta;
             }
-            if(Keyboard[Key.D]) {
+            if(KeyboardState[Keys.D]) {
                 var ortho = Vector3.Cross(
                     camera.Transformation.Column1.Xyz,
                     camera.Transformation.Column2.Xyz);
                 camera.Position += ortho * translationSens * fTimeDelta;
             }
-            if(Keyboard[Key.W]) {
+            if(KeyboardState[Keys.W]) {
                 camera.Position -= new Vector3(
                     camera.Transformation.Column2.X,
                     camera.Transformation.Column2.Y,
                     camera.Transformation.Column2.Z) * translationSens * fTimeDelta;
             }
-            if(Keyboard[Key.S]) {
+            if(KeyboardState[Keys.S]) {
                 camera.Position += new Vector3(
                     camera.Transformation.Column2.X,
                     camera.Transformation.Column2.Y,
                     camera.Transformation.Column2.Z) * translationSens * fTimeDelta;
             }
-            if(Keyboard[Key.E]) {
+            if(KeyboardState[Keys.E]) {
                 camera.Position += new Vector3(
                     camera.Transformation.Column1.X,
                     camera.Transformation.Column1.Y,
                     camera.Transformation.Column1.Z) * translationSens * fTimeDelta;
             }
-            if(Keyboard[Key.Q]) {
+            if(KeyboardState[Keys.Q]) {
                 camera.Position -= new Vector3(
                     camera.Transformation.Column1.X,
                     camera.Transformation.Column1.Y,
                     camera.Transformation.Column1.Z) * translationSens * fTimeDelta;
             }
-            if(Keyboard[Key.Up]) {
+            if(KeyboardState[Keys.Up]) {
                 //camera.XAngle -= rotationSens * fTimeDelta;
             }
-            if(Keyboard[Key.Down]) {
+            if(KeyboardState[Keys.Down]) {
                 //camera.XAngle += rotationSens * fTimeDelta;
             }
-            if(Keyboard[Key.Left]) {
+            if(KeyboardState[Keys.Left]) {
                 camera.YAngle -= rotationSens * fTimeDelta;
             }
-            if(Keyboard[Key.Right]) {
+            if(KeyboardState[Keys.Right]) {
                 camera.YAngle += rotationSens * fTimeDelta;
             }
 
@@ -664,8 +658,8 @@ namespace derbaum
 
         private void CheckOpenGlErrors(bool dismiss = false)
         {
-            ErrorCode error;
-            while((error = GL.GetError()) != ErrorCode.NoError && updateCounter % 30 == 0 && !dismiss) {
+            OpenTK.Graphics.OpenGL.ErrorCode error;
+            while((error = GL.GetError()) != OpenTK.Graphics.OpenGL.ErrorCode.NoError && updateCounter % 30 == 0 && !dismiss) {
                 Console.WriteLine($"OpenGL error: {error.ToString()}");
             }
         }
@@ -675,29 +669,26 @@ namespace derbaum
             if (asset.IsLoaded) return;
             int textureHandle = GL.GenTexture();
             GL.BindTexture(TextureTarget.Texture2D, textureHandle);
-            Bitmap bmp = new Bitmap(asset.AssetName);
-            int width = bmp.Width;
-            int height = bmp.Height;
-            BitmapData bmpData = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),
-                                              ImageLockMode.ReadOnly,
-                                              System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            var image = SixLabors.ImageSharp.Image.Load(asset.AssetName);
+            var imageData = image.CloneAs<SixLabors.ImageSharp.PixelFormats.Bgra32>();
 
+            byte[] pixelBytes = new byte[image.Width * image.Height * 4];
+            imageData.CopyPixelDataTo(pixelBytes);
             GL.TexImage2D(TextureTarget.Texture2D,
                           0,
                           PixelInternalFormat.Rgba,
-                          bmpData.Width,
-                          bmpData.Height,
+                          imageData.Width,
+                          imageData.Height,
                           0,
-                          OpenTK.Graphics.OpenGL.PixelFormat.Bgra,
+                          PixelFormat.Bgra,
                           PixelType.UnsignedByte,
-                          bmpData.Scan0);
+                          pixelBytes);
             GL.TexParameter(TextureTarget.Texture2D,
                             TextureParameterName.TextureMinFilter,
                             (int)TextureMinFilter.Nearest);
             GL.TexParameter(TextureTarget.Texture2D,
                             TextureParameterName.TextureMagFilter,
                             (int)TextureMinFilter.Nearest);
-            bmp.UnlockBits(bmpData);
             GL.GenerateMipmap(GenerateMipmapTarget.Texture2D);
             asset.OpenGLHandle = textureHandle;
             asset.IsLoaded = true;
@@ -945,10 +936,10 @@ namespace derbaum
 
         protected override void OnKeyDown(KeyboardKeyEventArgs e)
         {
-            if (e.Key == Key.Enter && e.Modifiers == KeyModifiers.Alt) {
+            if (e.Key == Keys.Enter && e.Modifiers == KeyModifiers.Alt) {
                 this.toggleFullScreen = true;
             }
-            if(e.Key == Key.Space) {
+            if(e.Key == Keys.Space) {
                 this.cameraOverride = true;
             }
             else {
@@ -958,8 +949,8 @@ namespace derbaum
 
         protected override void OnUpdateFrame(FrameEventArgs e)
         {
-            if (Keyboard[Key.Escape]) {
-                this.Exit();
+            if (KeyboardState[Keys.Escape]) {
+                this.Close();
             }
 
             if (this.toggleFullScreen) {
