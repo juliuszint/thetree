@@ -10,4 +10,5 @@ is used to load and decode the image assets from the disk.
 
 ### Preview
 
-![](resources/showcase.m4v)
+https://user-images.githubusercontent.com/11739398/156195659-75a98203-1e6c-451a-b105-1828cc741ba8.mov
+
